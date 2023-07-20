@@ -319,8 +319,8 @@ auto CardFinder::GetLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv:
 }
 
 auto CardFinder::GetCrossPointFromTwoLines(
-        std::vector<cv::Vec4f>& line1,
-        std::vector<cv::Vec4f>& line2) -> cv::Point2f
+        Lines& line1,
+        Lines& line2) -> cv::Point2f
 {
     cv::Point2f res_pt;
     if (line1.size() != 0 && line2.size() != 0)
@@ -627,7 +627,7 @@ auto CardFinder::DataClassification(std::vector<cv::Rect>& rois) -> std::vector<
 
 auto CardFinder::DataDiscrimination(
         cv::Mat& src, std::vector<cv::Rect>& areas,
-        torch::jit::script::Module& module, std::map<int, char>& labels) -> std::string
+        Module& module, std::map<int, char>& labels) -> std::string
 {
     if (src.empty() || src.type() != CV_8UC1) return std::string();
      // 숫자인식의 결과가 저장되는 변수
