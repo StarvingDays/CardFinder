@@ -5,14 +5,15 @@
 #include <ThreadPool.hpp>
 #include <torch/script.h>
 
-
+using Module = torch::jit::script::Module;
+using Lines = std::vector<cv::Vec4f>;
 // Singleton Instance 
-// Java¿¡ CardFinder ÀÎ½ºÅÏ½º¸¦ ÀúÀå ¸ø ÇÏ±â ¶§¹®¿¡
-// ¸Å ÇÁ·¹ÀÓ¸¶´Ù ÀÎ½ºÅÏ½º ÃÊ±âÈ­¸¦ ¹æÁöÇÏ±â À§ÇØ ½Ì±ÛÅæÀ» »ç¿ë
+// Javaì— CardFinder ì¸ìŠ¤í„´ìŠ¤ë¥¼ ì €ì¥ ëª» í•˜ê¸° ë•Œë¬¸ì—
+// ë§¤ í”„ë ˆì„ë§ˆë‹¤ ì¸ìŠ¤í„´ìŠ¤ ì´ˆê¸°í™”ë¥¼ ë°©ì§€í•˜ê¸° ìœ„í•´ ì‹±ê¸€í†¤ì„ ì‚¬ìš©
 class CardFinder
 {
 public:
-    // »ó´Ü, ÁÂÃø, ÇÏ´Ü, ¿ìÃø ¿µ»óÀ» ±¸ºĞÇÏ´Â enum class
+    // ìƒë‹¨, ì¢Œì¸¡, í•˜ë‹¨, ìš°ì¸¡ ì˜ìƒì„ êµ¬ë¶„í•˜ëŠ” enum class
     enum class AreaLocation
     {
         TOP,
@@ -20,95 +21,95 @@ public:
         BOTTOM,
         RIGHT
     };
-    // Singleton Instance »ı¼º ÇÔ¼ö
+    // Singleton Instance ìƒì„± í•¨ìˆ˜
     static CardFinder& GetInstance(JNIEnv& env, jobject& obj, int& w, int& h);
-    // ¿µ»ó ºĞ¼® ½ÃÀÛÇÔ¼ö
+    // ì˜ìƒ ë¶„ì„ ì‹œì‘í•¨ìˆ˜
     auto Start(cv::Mat& src) -> std::string;
-    // ÀüÃ¼ °ü½É¿µ¿ª ¹İÈ¯ ÇÔ¼ö
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­ ë°˜í™˜ í•¨ìˆ˜
     auto GetCapturedArea() -> cv::Rect&;
-    // Ã¼Å©Ä«µå¸¦ Æ÷ÂøÇÏ¿© ¾òÀº ³× °³ÀÇ ±³Á¡À» ¹İÈ¯ÇÏ´Â ÇÔ¼ö
+    // ì²´í¬ì¹´ë“œë¥¼ í¬ì°©í•˜ì—¬ ì–»ì€ ë„¤ ê°œì˜ êµì ì„ ë°˜í™˜í•˜ëŠ” í•¨ìˆ˜
     auto GetCoordinates() -> std::vector<float>;
-    // ¼Ò¸êÀÚ
+    // ì†Œë©¸ì
     virtual ~CardFinder() = default;
 
 private:
-    // CardFinder Instance »ı¼ºÀÚ
+    // CardFinder Instance ìƒì„±ì
     CardFinder(JNIEnv& env, jobject& obj, int& w, int& h);
-    // android studio java PreviewViewÀÇ roi size¸¦ È¹µæÇÏ´Â ÇÔ¼ö
+    // android studio java PreviewViewì˜ roi sizeë¥¼ íšë“í•˜ëŠ” í•¨ìˆ˜
     auto GetImageViewSize(JNIEnv& env, jobject& obj, const char* class_dir) -> cv::Size;
-    // ÀüÃ¼ °ü½É¿µ¿ªÀ» È¹µæÇÏ´Â ÇÔ¼ö
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­ì„ íšë“í•˜ëŠ” í•¨ìˆ˜
     auto SetCapturedArea(int w, int h) -> cv::Rect;
-    // ½ºÄÉÀÏÆÑÅÍ¸¦ °è»êÇÏ´Â ÇÔ¼ö
+    // ìŠ¤ì¼€ì¼íŒ©í„°ë¥¼ ê³„ì‚°í•˜ëŠ” í•¨ìˆ˜
     auto SetScaleFactor(int w, int h) -> cv::Point2f;
-    // ºÎºĞ°ü½É¿µ¿ª(°¡·Î, ¼¼·Î)À» È¹µæÇÏ´Â ÇÔ¼ö
+    // ë¶€ë¶„ê´€ì‹¬ì˜ì—­(ê°€ë¡œ, ì„¸ë¡œ)ì„ íšë“í•˜ëŠ” í•¨ìˆ˜
     auto SetPartsOfCapturedArea() -> std::vector<cv::Rect>;
-    // ÃÖ¼ÒÀÚ½Â¹à±âº¸Á¤¿¡ »ç¿ëµÇ´Â Çà·ÄÀ» ¸¸µå´Â ÇÔ¼ö
+    // ìµœì†ŒììŠ¹ë°ê¸°ë³´ì •ì— ì‚¬ìš©ë˜ëŠ” í–‰ë ¬ì„ ë§Œë“œëŠ” í•¨ìˆ˜
     auto SetBrightCorrectionModels() -> cv::Mat;
-    // ÃÖ¼ÒÀÚ½Â¹à±âº¸Á¤ÀÇ °á°ú ¿µ»óÀ» ´ãÀ» vector<Mat> Å¸ÀÔÀÇ µ¥ÀÌÅÍ¸¦ ¸¸µå´Â ÇÔ¼ö
+    // ìµœì†ŒììŠ¹ë°ê¸°ë³´ì •ì˜ ê²°ê³¼ ì˜ìƒì„ ë‹´ì„ vector<Mat> íƒ€ì…ì˜ ë°ì´í„°ë¥¼ ë§Œë“œëŠ” í•¨ìˆ˜
     auto SetBrightCorrectionFields() -> cv::Mat;
-    // Çª¸®¿¡ º¯È¯¿¡ »ç¿ëµÇ´Â °¡¿ì½Ã¾È ÇÊÅÍ¸¦ ¸¸µå´Â ÇÔ¼ö
+    // í‘¸ë¦¬ì— ë³€í™˜ì— ì‚¬ìš©ë˜ëŠ” ê°€ìš°ì‹œì•ˆ í•„í„°ë¥¼ ë§Œë“œëŠ” í•¨ìˆ˜
     auto SetGaussianFilters(cv::Size size, double D0) -> const std::vector<cv::Mat>;
-    // ³× °³ÀÇ ±³Á¡¿¡ Scale factor¸¦ °öÇÏ´Â ÇÔ¼ö
+    // ë„¤ ê°œì˜ êµì ì— Scale factorë¥¼ ê³±í•˜ëŠ” í•¨ìˆ˜
     auto SetCoordinates(cv::Point2f& pt1, cv::Point2f& pt2, cv::Point2f& pt3, cv::Point2f& pt4) -> void;
-    // Contrast Limiting Adaptive Histogram Equalization °´Ã¼ »ı¼º ÇÔ¼ö
+    // Contrast Limiting Adaptive Histogram Equalization ê°ì²´ ìƒì„± í•¨ìˆ˜
     auto SetCLAHE(double limit_var, cv::Size tile_size) -> cv::Ptr<cv::CLAHE>;
-    // pytorch ¸ğµ¨À» ºÒ·¯¿À´Â ÇÔ¼ö
-    auto SetTorchModel(JNIEnv& env, jobject& obj, const char* class_dir) -> std::vector<torch::jit::script::Module>;
-    // Ã¼Å©Ä«µåÀÇ °¡·Î ¼¼·Î Á÷¼±À» ¾ò´Â ÇÔ¼ö
-    auto GetLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv::Vec4f>;
-    // Ã¼Å©Ä«µåÀÇ °¡·Î ¼¼·Î Á÷¼±µé¿¡¼­ ±³Á¡À» ±¸ÇÏ°í ¼¼ Á¡À» ÀÌ¿ëÇÏ¿© °¢µµ¸¦ ¾ò´Â ÇÔ¼ö
-    auto GetCrossPointFromTwoLines(std::vector<cv::Vec4f>& line1, std::vector<cv::Vec4f>& line2)->cv::Point2f;
-    // µÎ Á¡ÀÌ ÀÌ·ç´Â °¢µµ(Ã¼Å©Ä«µåÀÇ ±â¿ï±â)¸¦ ±¸ÇÏ´Â ÇÔ¼ö
+    // pytorch ëª¨ë¸ì„ ë¶ˆëŸ¬ì˜¤ëŠ” í•¨ìˆ˜
+    auto SetTorchModel(JNIEnv& env, jobject& obj, const char* class_dir) -> std::vector<Module>;
+    // ì²´í¬ì¹´ë“œì˜ ê°€ë¡œ ì„¸ë¡œ ì§ì„ ì„ ì–»ëŠ” í•¨ìˆ˜
+    auto GetLines(cv::Mat& src, AreaLocation arealoc) -> Lines;
+    // ì²´í¬ì¹´ë“œì˜ ê°€ë¡œ ì„¸ë¡œ ì§ì„ ë“¤ì—ì„œ êµì ì„ êµ¬í•˜ê³  ì„¸ ì ì„ ì´ìš©í•˜ì—¬ ê°ë„ë¥¼ ì–»ëŠ” í•¨ìˆ˜
+    auto GetCrossPointFromTwoLines(Lines& line1, Lines& line2)->cv::Point2f;
+    // ë‘ ì ì´ ì´ë£¨ëŠ” ê°ë„(ì²´í¬ì¹´ë“œì˜ ê¸°ìš¸ê¸°)ë¥¼ êµ¬í•˜ëŠ” í•¨ìˆ˜
     auto GetAngleFromTwoPoints(cv::Point2f pt1, cv::Point2f pt2, AreaLocation arealoc) -> float;
-    // ÃÖ¼ÒÀÚ½Â¹à±âº¸Á¤À» ¼öÇàÇÏ´Â ÇÔ¼ö
+    // ìµœì†ŒììŠ¹ë°ê¸°ë³´ì •ì„ ìˆ˜í–‰í•˜ëŠ” í•¨ìˆ˜
     auto BrightCorrect(cv::Mat& src) -> cv::Mat&;
-    // Çª¸®¿¡ HomomorhpicFiteringÀ» ¼öÇàÇÏ´Â ÇÔ¼ö
+    // í‘¸ë¦¬ì— HomomorhpicFiteringì„ ìˆ˜í–‰í•˜ëŠ” í•¨ìˆ˜
     virtual auto HomomorphicCorrect(cv::Mat& src) -> cv::Mat;
-    // ¼ıÀÚ¿µ¿ªÀÇ ÀÌ¹ÌÁö¸¦ ÀüÃ³¸®ÇÏ´Â ÇÔ¼ö
+    // ìˆ«ìì˜ì—­ì˜ ì´ë¯¸ì§€ë¥¼ ì „ì²˜ë¦¬í•˜ëŠ” í•¨ìˆ˜
     auto AreaPreProcess(cv::Mat& src, cv::Mat& dst) -> void;
-    // ÀÌÁø¿µ»ó¿¡¼­ °´Ã¼µéÀÇ ÀâÀ½À» ¾ø¾Ö´Â ÇÔ¼ö
+    // ì´ì§„ì˜ìƒì—ì„œ ê°ì²´ë“¤ì˜ ì¡ìŒì„ ì—†ì• ëŠ” í•¨ìˆ˜
     auto AreaMasking(cv::Mat& src) -> void;
-    // ÀÌÁø¿µ»ó¿¡¼­ °´Ã¼µéÀ» ºĞ·ùÇÏ´Â ÇÔ¼ö
+    // ì´ì§„ì˜ìƒì—ì„œ ê°ì²´ë“¤ì„ ë¶„ë¥˜í•˜ëŠ” í•¨ìˆ˜
     virtual auto AreaSegmant(cv::Mat& src, int offset_width, int offset_height) -> std::vector<cv::Rect>;
-    // ¼ıÀÚ¿µ¿ªµé¸¸ Ãß·Á³»´Â ÇÔ¼ö
+    // ìˆ«ìì˜ì—­ë“¤ë§Œ ì¶”ë ¤ë‚´ëŠ” í•¨ìˆ˜
     virtual auto DataClassification(std::vector<cv::Rect>& rois) -> std::vector<cv::Rect>;
-    // ¼ıÀÚ¿µ¿ªÀ» Pytorch Script¸¦ È°¿ëÇÏ¿© ÀÎ½ÄÇÏ´Â ÇÔ¼ö
-    auto DataDiscrimination(cv::Mat& src, std::vector<cv::Rect>& areas, torch::jit::script::Module& module, std::map<int, char>& labels) -> std::string;
+    // ìˆ«ìì˜ì—­ì„ Pytorch Scriptë¥¼ í™œìš©í•˜ì—¬ ì¸ì‹í•˜ëŠ” í•¨ìˆ˜
+    auto DataDiscrimination(cv::Mat& src, std::vector<cv::Rect>& areas, Module& module, std::map<int, char>& labels) -> std::string;
 
-    // ½º·¹µå °¹¼ö
+    // ìŠ¤ë ˆë“œ ê°¯ìˆ˜
     int m_thread_num;
-    // android studio java PreviewViewÀÇ roi size
+    // android studio java PreviewViewì˜ roi size
     cv::Size m_image_view_size;
-    // ÀüÃ¼ °ü½É¿µ¿ª
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­
     cv::Rect m_captured_area;
-    // ImageAnalysisÀÇ roi¿¡¼­ È¹µæÇÑ ±³Á¡µéÀÇ À§Ä¡¸¦ º¸Á¤ÇØÁÖ´Â ½ºÄÉÀÏÆÑÅÍ
+    // ImageAnalysisì˜ roiì—ì„œ íšë“í•œ êµì ë“¤ì˜ ìœ„ì¹˜ë¥¼ ë³´ì •í•´ì£¼ëŠ” ìŠ¤ì¼€ì¼íŒ©í„°
     cv::Point2f m_scale_factor;
-    // ÀüÃ¼ °ü½É¿µ¿ª¿¡¼­ »ó´Ü, ÁÂÃø, ÇÏ´Ü, ¿ìÃø °ü½É¿µ¿ªÀ» »ı¼ºÇÒ ¶§ ÇÊ¿äÇÑ ³× °³ÀÇ ±³Á¡
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­ì—ì„œ ìƒë‹¨, ì¢Œì¸¡, í•˜ë‹¨, ìš°ì¸¡ ê´€ì‹¬ì˜ì—­ì„ ìƒì„±í•  ë•Œ í•„ìš”í•œ ë„¤ ê°œì˜ êµì 
     std::vector<cv::Point2f> m_cross_pt4;
-    // »ó´Ü, ÁÂÃø, ÇÏ´Ü, ¿ìÃø °ü½É¿µ¿ª
+    // ìƒë‹¨, ì¢Œì¸¡, í•˜ë‹¨, ìš°ì¸¡ ê´€ì‹¬ì˜ì—­
     std::vector<cv::Rect> m_parts_of_captured_area;
-    // ÃÖ¼ÒÀÚ½ÂÀÇ ÀüÃ¼¿µ¿ª, °¡·Î, ¼¼·Î¿¡ ÇØ´çÇÏ´Â A Çà·Ä
+    // ìµœì†ŒììŠ¹ì˜ ì „ì²´ì˜ì—­, ê°€ë¡œ, ì„¸ë¡œì— í•´ë‹¹í•˜ëŠ” A í–‰ë ¬
     cv::Mat m_A;
-    // ÃÖ¼ÒÀÚ½Â ¹à±â º¸Á¤ÀÇ °á°ú°¡ ´ã±â´Â ÀüÃ¼, °¡·Î, ¼¼·Î, ¿µ¿ªÀÇ Mat Å¸ÀÔ ÀÌ¹ÌÁö
+    // ìµœì†ŒììŠ¹ ë°ê¸° ë³´ì •ì˜ ê²°ê³¼ê°€ ë‹´ê¸°ëŠ” ì „ì²´, ê°€ë¡œ, ì„¸ë¡œ, ì˜ì—­ì˜ Mat íƒ€ì… ì´ë¯¸ì§€
     cv::Mat m_br_correction_field;
-    // ½º·¹µåÇ®
+    // ìŠ¤ë ˆë“œí’€
     ThreadPool::ThreadPool m_pool;
-    // pytorch ½ºÅ©¸³Æ® ¸ğµâ
+    // pytorch ìŠ¤í¬ë¦½íŠ¸ ëª¨ë“ˆ
     std::vector<torch::jit::script::Module> m_modules;
-    // ÀÌÁø¿µ»óÀÇ Ä§½Ä ¹× È®Àå ¿¬»ê »ç¿ëµÇ´Â Ä¿³Î
+    // ì´ì§„ì˜ìƒì˜ ì¹¨ì‹ ë° í™•ì¥ ì—°ì‚° ì‚¬ìš©ë˜ëŠ” ì»¤ë„
     cv::Mat m_kernel;
-    // È÷½ºÅä±×·¥ ÆòÁØÈ­¿¡ »ç¿ëµÇ´Â CLAHE °´Ã¼
+    // íˆìŠ¤í† ê·¸ë¨ í‰ì¤€í™”ì— ì‚¬ìš©ë˜ëŠ” CLAHE ê°ì²´
     cv::Ptr<cv::CLAHE> m_clahe;
-    // ÀüÃ¼ °ü½É¿µ¿ªÀ¸·Î Æ÷ÂøµÈ ÀÌ¹ÌÁö
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­ìœ¼ë¡œ í¬ì°©ëœ ì´ë¯¸ì§€
     std::vector<jfloat> m_res_coordinate;
-    // ·¹ÀÌºí
+    // ë ˆì´ë¸”
     std::map<int, char> m_labels_number, m_labels_alphabet;
 
 
 protected:
-    // SubProcess instance »ı¼º ½Ã »ç¿ëµÇ´Â »ı¼ºÀÚ
+    // SubProcess instance ìƒì„± ì‹œ ì‚¬ìš©ë˜ëŠ” ìƒì„±ì
     CardFinder(int& w, int& h);
-    // °¡¿ì½Ã¾È ÀúÁÖÆÄ ¹× °íÁÖÆÄ ÇÊÅÍ
+    // ê°€ìš°ì‹œì•ˆ ì €ì£¼íŒŒ ë° ê³ ì£¼íŒŒ í•„í„°
     std::vector<cv::Mat> m_gaussian_filters;
 
 };
