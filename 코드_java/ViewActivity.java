@@ -271,7 +271,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     }
 
 
-    public void DrawCoordinates(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4)
+    private void DrawCoordinates(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4)
     {
         runOnUiThread(new Runnable() {                                                                                   // UI 스레드에서 동작
 
