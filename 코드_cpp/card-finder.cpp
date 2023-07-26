@@ -25,12 +25,12 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
         m_clahe(SetCLAHE(4.0, cv::Size(8, 8))),                                                                      // 명암 보정에 쓰이는 CLAHE 객체
         m_gaussian_filters(SetGaussianFilters(m_captured_area.size(), 30))                                           // 가우시안 low, high 필터
 {
-    m_labels_number = {                                                                                              // 숫자 레이블
+    m_label_number = {                                                                                              // 숫자 레이블
             {0, '0'}, {1, '1'},
             {2, '2'}, {3, '3'}, {4, '4'}, {5, '5'},
             {6, '6'}, {7, '7'}, {8, '8'}, {9, '9'}
     };
-    m_labels_alphabet = {                                                                                            // 알파벳 레이블
+    m_label_alphabet = {                                                                                            // 알파벳 레이블
             {0, 'A'}, {1, 'B'}, {2, 'C'}, {3, 'D'},
             {4, 'E'}, {5, 'F'}, {6, 'G'}, {7, 'H'},
             {8, 'I'}, {9, 'J'}, {10, 'K'}, {11, 'L'},
@@ -111,23 +111,26 @@ auto CardFinder::SetPartsOfCapturedArea() -> std::vector<cv::Rect>
     cv::Point pt8(
             (m_captured_area.width - 1) * 0.9f, m_captured_area.height - 1);
 
-    m_cross_pt4.push_back(GetCrossPointFromPT4(pt1, pt2, pt3, pt4));                                                 // 교점1
-    m_cross_pt4.push_back(GetCrossPointFromPT4(pt1, pt2, pt7, pt8));                                                 // 교점2
-    m_cross_pt4.push_back(GetCrossPointFromPT4(pt3, pt4, pt5, pt6));                                                 // 교점3
-    m_cross_pt4.push_back(GetCrossPointFromPT4(pt5, pt6, pt7, pt8));                                                 // 교점4
+    cv::Point cross_pt1 = FindCrossPoint(pt1, pt2, pt3, pt4);                                                       // 교점1
+    cv::Point cross_pt2 = FindCrossPoint(pt1, pt2, pt7, pt8);                                                       // 교점2
+    cv::Point cross_pt3 = FindCrossPoint(pt3, pt4, pt5, pt6);                                                       // 교점3
+    cv::Point cross_pt4 = FindCrossPoint(pt5, pt6, pt7, pt8);                                                       // 교점4
+
+    m_start_pt_of_right_area = cross_pt2;
+    m_start_pt_of_bottom_area = cross_pt3;
 
     return std::vector<cv::Rect>() = {
             cv::Rect(                                                                                                // 상단 관심영역
-                    cv::Point(m_cross_pt4[0].x + 1, 0),
-                    cv::Point(m_cross_pt4[1].x - 1, m_cross_pt4[1].y)),
+                    cv::Point(cross_pt1.x + 1, 0),
+                    cv::Point(cross_pt2.x - 1, cross_pt2.y)),
             cv::Rect(                                                                                                // 좌측 관심영역
                     cv::Point(0, 0),
-                    cv::Point(m_cross_pt4[2].x, m_captured_area.height - 1)),
+                    cv::Point(cross_pt3.x, m_captured_area.height - 1)),
             cv::Rect(                                                                                                // 하단 관심영역
-                    cv::Point(m_cross_pt4[2].x + 1, m_cross_pt4[2].y),
-                    cv::Point(m_cross_pt4[3].x - 1, m_captured_area.height - 1)),
+                    cv::Point(cross_pt3.x + 1, cross_pt3.y),
+                    cv::Point(cross_pt4.x - 1, m_captured_area.height - 1)),
             cv::Rect(                                                                                                // 우측 관심영역
-                    cv::Point(m_cross_pt4[1].x, 0),
+                    cv::Point(cross_pt2.x, 0),
                     cv::Point(m_captured_area.width - 1, m_captured_area.height - 1))
     };
 
@@ -256,7 +259,7 @@ auto CardFinder::SetTorchModel(JNIEnv& env, jobject& obj, const char* class_dir)
     return std::vector<torch::jit::script::Module>() = { module_number, module_alphabet };
 }
 
-auto CardFinder::GetLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv::Vec4f> {
+auto CardFinder::FindLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv::Vec4f> {
     std::vector<cv::Vec4f> linesP, resultP;                                                                          // 발견된 직선을 저장하는 객체
 
     cv::HoughLinesP(src, linesP, 1, CV_PI / 180, 50, 50, 5);                                                         // 영상에서 직선을 검출하는 OpenCV 함수
@@ -264,8 +267,10 @@ auto CardFinder::GetLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv:
     bool col_is_big = src.cols > src.rows;                                                                           // 가로 세로의 길이 비교
 
     size_t line_size = linesP.size();                                                                                // 검출된 직선들의 개수
+    int whole_width = m_captured_area.width;
+    int whole_height = m_captured_area.height;
 
-    if (line_size <= 20)
+    if (line_size <= 10)
     {
         for (size_t j = 0; j < line_size; ++j)
         {
@@ -290,12 +295,11 @@ auto CardFinder::GetLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv:
                 else if (arealoc == AreaLocation::BOTTOM)                                                            // 하단 영역
                 {
                     resultP.push_back(
-                            cv::Vec4f(x1, y1 + m_cross_pt4[2].y, x2, y2 + m_cross_pt4[2].y));
+                            cv::Vec4f(x1, y1 + m_start_pt_of_bottom_area.y, x2, y2 + m_start_pt_of_bottom_area.y));
                 }
             }
             else if (col_is_big == false)                                                                            // src의 cols 길이가 rows 길이보다 작을 경우
             {
-
                 float y1 = pt1.y - src.rows;
                 float x1 = (y1 + (-1.0f * n)) / m;
 
@@ -309,7 +313,7 @@ auto CardFinder::GetLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv:
                 else if (arealoc == AreaLocation::RIGHT)                                                             // 우측 영역
                 {
                     resultP.push_back(
-                            cv::Vec4f(x1 + m_cross_pt4[1].x, y1, x2 + m_cross_pt4[1].x, y2));
+                            cv::Vec4f(x1 + m_start_pt_of_right_area.x, y1, x2 + m_start_pt_of_right_area.x, y2));
                 }
             }
         }
@@ -318,30 +322,29 @@ auto CardFinder::GetLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv:
     return resultP;
 }
 
-auto CardFinder::GetCrossPointFromTwoLines(
-        Lines& line1,
-        Lines& line2) -> cv::Point2f
+auto CardFinder::FindCorner(std::vector<cv::Vec4f>& lines1, std::vector<cv::Vec4f>& lines2) -> cv::Point2f
 {
     cv::Point2f res_pt;
-    if (line1.size() != 0 && line2.size() != 0)
+
+    if (lines1.size() != 0 && lines2.size() != 0)
     {
-        size_t size_col_mn = line1.size();
-        size_t size_row_mn = line2.size();
+        size_t size_col_mn = lines1.size();
+        size_t size_row_mn = lines2.size();
 
         for (int i = 0; i < size_col_mn; ++i)
         {
-            cv::Point2f pt1(line1[i][0], line1[i][1]);                                                               // 직선1 시작지점
-            cv::Point2f pt2(line1[i][2], line1[i][3]);                                                               // 직선1 끝지점
+            cv::Point2f pt1(lines1[i][0], lines1[i][1]);                                                             // 직선1 시작지점
+            cv::Point2f pt2(lines1[i][2], lines1[i][3]);                                                             // 직선1 끝지점
 
             for (int j = 0; j < size_row_mn; ++j)
             {
-                cv::Point2f pt3(line2[j][0], line2[j][1]);                                                           // 직선2 시작지점
-                cv::Point2f pt4(line2[j][2], line2[j][3]);                                                           // 직선2 끝지점
+                cv::Point2f pt3(lines2[j][0], lines2[j][1]);                                                         // 직선2 시작지점
+                cv::Point2f pt4(lines2[j][2], lines2[j][3]);                                                         // 직선2 끝지점
 
-                cv::Point2f cross_point = GetCrossPointFromPT4(pt1, pt2, pt3, pt4);                                  // 직선 두개의 지작점과 끝지점을 받아 교점을 획득
+                cv::Point2f cross_point = FindCrossPoint(pt1, pt2, pt3, pt4);                                        // 직선 두개의 시작점과 끝지점을 받아 교점을 획득
 
 
-                float cos_ang = GetAngleFromDotProduct(                                                              // 벡터의 내적에서 코사인 각을 획득
+                float cos_ang = FindAngle(                                                                           // 벡터의 내적에서 코사인 각을 획득
                         cross_point - pt2,
                         cross_point - pt4);
 
@@ -357,58 +360,6 @@ auto CardFinder::GetCrossPointFromTwoLines(
     exit:
 
     return res_pt;
-}
-
-auto CardFinder::GetAngleFromTwoPoints(cv::Point2f pt1, cv::Point2f pt2, AreaLocation arealoc) -> float
-{
-    cv::Point2f pt3;
-    float angle = 0.0f;
-
-    if (pt1.y > pt2.y && arealoc == AreaLocation::TOP)                                                               // 상단영역이 반시계방향으로 기운 경우
-    {
-        pt3 = cv::Point2f(pt1.x, pt2.y);
-        angle = -1.0f * GetAngleFromDotProduct(pt3 - pt2, pt1 - pt2);
-    }
-    else if (pt1.y < pt2.y && arealoc == AreaLocation::TOP)                                                          //상단영역이 시계방향으로 기운 경우
-    {
-        pt3 = cv::Point2f(pt2.x, pt1.y);
-        angle = GetAngleFromDotProduct(pt3 - pt1, pt2 - pt1);
-    }
-    else if (pt1.y > pt2.y && arealoc == AreaLocation::BOTTOM)                                                       // 하단영역이 반시계방향으로 기운 경우
-    {
-        pt3 = cv::Point2f(pt2.x, pt1.y);
-        angle = -1.0f * GetAngleFromDotProduct(pt3 - pt1, pt2 - pt1);
-    }
-    else if (pt1.y < pt2.y && arealoc == AreaLocation::BOTTOM)                                                       // 하단영역이 시계방향으로 기운 경우
-    {
-        pt3 = cv::Point2f(pt1.x, pt2.y);
-        angle = GetAngleFromDotProduct(pt3 - pt2, pt1 - pt2);
-    }
-    else if (pt1.x < pt2.x && arealoc == AreaLocation::LEFT)                                                         // 좌측영역이 반시계방향으로 기운 경우
-    {
-        pt3 = cv::Point2f(pt1.x, pt2.y);
-        angle = -1.0f * GetAngleFromDotProduct(pt3 - pt1, pt2 - pt1);
-    }
-    else if (pt1.x > pt2.x && arealoc == AreaLocation::LEFT)                                                         // 좌측영역이 시계방향으로 기운 경우
-    {
-        pt3 = cv::Point2f(pt2.x, pt1.y);
-        angle = GetAngleFromDotProduct(pt3 - pt2, pt1 - pt2);
-    }
-    else if (pt1.x < pt2.x && arealoc == AreaLocation::RIGHT)                                                        // 우측영역이 반시계방향으로 기운 경우
-    {
-        pt3 = cv::Point2f(pt2.x, pt1.y);
-        angle = -1.0f * GetAngleFromDotProduct(pt3 - pt2, pt1 - pt2);
-    }
-    else if (pt1.x > pt2.x && arealoc == AreaLocation::RIGHT)                                                        // 우측영역이 시계방향으로 기운 경우
-    {
-        pt3 = cv::Point2f(pt1.x, pt2.y);
-        angle = GetAngleFromDotProduct(pt3 - pt1, pt2 - pt1);
-    }
-
-
-
-    return angle;
-
 }
 
 auto CardFinder::GetCapturedArea() -> cv::Rect&
@@ -601,7 +552,7 @@ auto CardFinder::DataClassification(std::vector<cv::Rect>& rois) -> std::vector<
 
             for (k = i * 4; k < j - 1; ++k)                                                                          // 0~3, 4~7, 8~11, 12~15에 해당하는 k, k+1 인덱스를 순회하여 길이를 비교하는 for문
             {
-                dist = GetDist(cv::Point(areas[k].br().x, areas[k].tl().y), areas[k + 1].tl());                      // 숫자간의 간격
+                dist = CalcDist(cv::Point(areas[k].br().x, areas[k].tl().y), areas[k + 1].tl());                      // 숫자간의 간격
 
                 if (dist < 5)                                                                                        // 숫자간의 간격이 5보다 작을 경우
                 {
@@ -611,7 +562,7 @@ auto CardFinder::DataClassification(std::vector<cv::Rect>& rois) -> std::vector<
 
             if (j - 1 < 12)
             {
-                dist = GetDist(
+                dist = CalcDist(
                         cv::Point(areas[j - 1].br().x, areas[j - 1].tl().y), areas[j].tl());                         // 3-4, 7-8, 11-12 번째 숫자간의 간격
                 if (dist > 6 && dist < 15) ++count2;                                                                 // 숫자간 사이 간격의 조건이 참이면 count2를 1씩 증가
 
@@ -627,7 +578,7 @@ auto CardFinder::DataClassification(std::vector<cv::Rect>& rois) -> std::vector<
 
 auto CardFinder::DataDiscrimination(
         cv::Mat& src, std::vector<cv::Rect>& areas,
-        Module& module, std::map<int, char>& labels) -> std::string
+        torch::jit::script::Module& module, std::map<int, char>& labels) -> std::string
 {
     if (src.empty() || src.type() != CV_8UC1) return std::string();
      // 숫자인식의 결과가 저장되는 변수
@@ -672,13 +623,13 @@ auto CardFinder::Start(cv::Mat& src) -> std::string
         auto col_area_img_proc_f1 = m_pool.PushJob([&, this]() {                                                     // 엣지 및 직선 검출 : 관심영역 상단 부분 가로
             cv::Mat temp;
             cv::Canny(src(m_parts_of_captured_area[0]), temp, 100, 500);
-            return this->GetLines(temp, AreaLocation::TOP);
+            return this->FindLines(temp, AreaLocation::TOP);
         });
 
         auto row_area_img_proc_f1 = m_pool.PushJob([&, this]() {                                                     // 엣지 및 직선 검출 : 관심영역 좌측 부분 가로
             cv::Mat temp;
             cv::Canny(src(m_parts_of_captured_area[1]), temp, 100, 500);
-            return this->GetLines(temp, AreaLocation::LEFT);
+            return this->FindLines(temp, AreaLocation::LEFT);
         });
 
         auto line_col1 = col_area_img_proc_f1.get();
@@ -689,13 +640,13 @@ auto CardFinder::Start(cv::Mat& src) -> std::string
             auto col_area_img_proc_f2 = m_pool.PushJob([&, this]() {                                                 // 엣지 및 직선 검출 : 관심영역 하단 부분 세로
                 cv::Mat temp;
                 cv::Canny(src(m_parts_of_captured_area[2]), temp, 100, 500);
-                return this->GetLines(temp, AreaLocation::BOTTOM);
+                return this->FindLines(temp, AreaLocation::BOTTOM);
             });
 
             auto row_area_img_proc_f2 = m_pool.PushJob([&, this]() {                                                 // 엣지 및 직선 검출 : 관심영역 우측 부분 세로
                 cv::Mat temp;
                 cv::Canny(src(m_parts_of_captured_area[3]), temp, 100, 500);
-                return this->GetLines(temp, AreaLocation::RIGHT);
+                return this->FindLines(temp, AreaLocation::RIGHT);
             });
 
             auto line_col2 = col_area_img_proc_f2.get();
@@ -704,37 +655,77 @@ auto CardFinder::Start(cv::Mat& src) -> std::string
             if (!line_col2.empty() && !line_row2.empty())                                                            // 하단과 우측의 영역에서 직선들이 발견된 경우
             {
                 cv::Point2f zero(0.0f, 0.0f);
-                cv::Point2f pt1 = this->GetCrossPointFromTwoLines(line_col1, line_row1);                             // 상단과 좌측영역에서 발견된 직선이 이루는 교점 획득
-                cv::Point2f pt2 = this->GetCrossPointFromTwoLines(line_col1, line_row2);                             // 상단과 하단영역에서 발견된 직선이 이루는 교점 획득
-                cv::Point2f pt3 = this->GetCrossPointFromTwoLines(line_col2, line_row1);                             // 하단과 좌측영역에서 발견된 직선이 이루는 교점 획득
-                cv::Point2f pt4 = this->GetCrossPointFromTwoLines(line_col2, line_row2);                             // 하단과 우측영역에서 발견된 직선이 이루는 교점 획득
+
+                 cv::Point2f pt1 = this->FindCorner(line_col1, line_row1);                                           // 상단과 좌측영역에서 발견된 직선이 이루는 교점 획득
+                 cv::Point2f pt2 = this->FindCorner(line_col1, line_row2);                                           // 상단과 하단영역에서 발견된 직선이 이루는 교점 획득
+                 cv::Point2f pt3 = this->FindCorner(line_col2, line_row1);                                           // 하단과 좌측영역에서 발견된 직선이 이루는 교점 획득
+                 cv::Point2f pt4 = this->FindCorner(line_col2, line_row2);                                           // 하단과 우측영역에서 발견된 직선이 이루는 교점 획득
 
                 if (pt1 != zero && pt2 != zero && pt3 != zero && pt4 != zero)                                        // 체크카드 네 곳의 모서리 교점을 획득한 경우
                 {
-                    bool is_inner_pt1 = ComparePosition(                                                             // 교점이 관심영역의 11시 방향의 영역에 들어가는 여부 확인
-                            cv::Point2f(0, 0),
-                            cv::Point2f(m_cross_pt4[0].x, m_cross_pt4[0].y), pt1);
+                    bool is_inner_pt1 =
+                            (pt1.x < src.cols && pt1.y < src.rows) &&
+                            (pt1.x > 0 && pt1.y > 0);
 
-                    bool is_inner_pt2 = ComparePosition(                                                             // 교점이 관심영역의 1시 방향의 영역에 들어가는 여부 확인
-                            cv::Point2f(m_cross_pt4[1].x, 0),
-                            cv::Point2f(src.cols, m_cross_pt4[1].y), pt2);
+                    bool is_inner_pt2 =
+                            (pt2.x < src.cols && pt1.y < src.rows) &&
+                            (pt2.x > 0 && pt1.y > 0);
 
-                    bool is_inner_pt3 = ComparePosition(                                                             // 교점이 관심영역의 7시 방향의 영역에 들어가는 여부 확인
-                            cv::Point2f(0, m_cross_pt4[2].y),
-                            cv::Point2f(m_cross_pt4[2].x, src.rows), pt3);
+                    bool is_inner_pt3 =
+                            (pt3.x < src.cols && pt1.y < src.rows) &&
+                            (pt3.x > 0 && pt1.y > 0);
 
-                    bool is_inner_pt4 = ComparePosition(                                                             // 교점이 관심영역의 5시 방향의 영역에 들어간느 여부 확인
-                            cv::Point2f(m_cross_pt4[3].x, m_cross_pt4[3].y),
-                            cv::Point2f(src.cols, src.rows), pt4);
+                    bool is_inner_pt4 =
+                            (pt4.x < src.cols && pt1.y < src.rows) &&
+                            (pt4.x > 0 && pt1.y > 0);
 
 
 
                     if ((is_inner_pt1 && is_inner_pt2 && is_inner_pt3 && is_inner_pt4) == true)                      // 교점이 모든 네 곳의 영역 내부에 위치하는 경우
                     {
-                        float ang1 = this->GetAngleFromTwoPoints(pt1, pt2, AreaLocation::TOP);                       // 교점 pt1과 pt2를 이은 직선이 기울어진 각도를 계산
-                        float ang2 = this->GetAngleFromTwoPoints(pt1, pt3, AreaLocation::LEFT);                      // 교점 pt1과 pt3를 이은 직선이 기울어진 각도를 계산
-                        float ang3 = this->GetAngleFromTwoPoints(pt3, pt4, AreaLocation::BOTTOM);                    // 교점 pt3와 pt4를 이은 직선이 기울어진 각도를 계산
-                        float ang4 = this->GetAngleFromTwoPoints(pt2, pt4, AreaLocation::RIGHT);                     // 교점 pt2와 pt4를 이은 직선이 기울어진 각도를 계산
+                        cv::Point2f tan_pos_pt;
+                        float ang1 = 0.0f, ang2 = 0.0f, ang3 = 0.0f, ang4 = 0.0f;
+                        if (pt1.y > pt2.y) // > >                                                                    // 상단영역이 반시계방향으로 기운 경우
+                        {
+                            tan_pos_pt = cv::Point2f(pt1.x, pt2.y);
+                            ang1 = FindAngle(tan_pos_pt - pt2, pt1 - pt2);
+                        }
+                        if (pt1.y < pt2.y) // > <                                                                    // 상단영역이 시계방향으로 기운 경우
+                        {
+                            tan_pos_pt = cv::Point2f(pt2.x, pt1.y);
+                            ang1 = FindAngle(tan_pos_pt - pt1, pt2 - pt1);
+                        }
+                        if (pt3.y > pt4.y)                                                                           // 하단영역이 반시계방향으로 기운 경우
+                        {
+                            tan_pos_pt = cv::Point2f(pt4.x, pt3.y);
+                            ang2 = FindAngle(tan_pos_pt - pt3, pt4 - pt3);
+                        }
+                        if (pt3.y < pt4.y)                                                                           // 하단영역이 시계방향으로 기운 경우
+                        {
+                            tan_pos_pt = cv::Point2f(pt3.x, pt4.y);
+                            ang2 = FindAngle(tan_pos_pt - pt4, pt3 - pt4);
+                        }
+                        if (pt1.x < pt3.x)                                                                           // 좌측영역이 반시계방향으로 기운 경우
+                        {
+                            tan_pos_pt = cv::Point2f(pt1.x, pt3.y);
+                            ang3 = FindAngle(tan_pos_pt - pt1, pt3 - pt1);
+                        }
+                        if (pt1.x > pt3.x)                                                                           // 좌측영역이 시계방향으로 기운 경우
+                        {
+                            tan_pos_pt = cv::Point2f(pt3.x, pt1.y);
+                            ang3 = FindAngle(tan_pos_pt - pt3, pt1 - pt3);
+                        }
+                        if (pt2.x < pt4.x)                                                                           // 우측영역이 반시계방향으로 기운 경우
+                        {
+                            tan_pos_pt = cv::Point2f(pt4.x, pt2.y);
+                            ang4 = FindAngle(tan_pos_pt - pt4, pt2 - pt4);
+                        }
+                        if (pt2.x > pt4.x)                                                                           // 우측영역이 시계방향으로 기운 경우
+                        {
+                            tan_pos_pt = cv::Point2f(pt2.x, pt4.y);
+                            ang4 = FindAngle(tan_pos_pt - pt2, pt4 - pt2);
+                        }
+
 
 
                         if ((ang1 != 0.0f) && (ang2 != 0.0f) && (ang3 != 0.0f) && (ang4 != 0.0f))                    // 기울기 각도 네 개를 모두 획득한 경우
@@ -829,10 +820,10 @@ auto CardFinder::Start(cv::Mat& src) -> std::string
                             {
                                 if(thresh_inv_bool == true)                                                          // 검은글씨 체크카드에서 숫자 16개 영역을 획득한 경우
                                     result = this->DataDiscrimination(                                               // 숫자 16자리 영역 이미지 인식 실행
-                                                    thresh_black_char_img, loc3, m_modules[0], m_labels_number);
+                                                    thresh_black_char_img, loc3, m_modules[0], m_label_number);
                                 if(thresh_bool == true)                                                              // 검은글씨가 아닌 체크카드에서 숫자 16개 영역을 획득한 경우
                                     result = this->DataDiscrimination(
-                                                    thresh_non_black_char_img, loc3, m_modules[0], m_labels_number);
+                                                    thresh_non_black_char_img, loc3, m_modules[0], m_label_number);
 
                                 for (int i = 0, j = 0; i < 16; i++)                                                  // 숫자 네 자리 마다 - 기호 삽입
                                 {
@@ -867,7 +858,7 @@ auto CardFinder::Start(cv::Mat& src) -> std::string
                                 if(loc3.size() == 9)                                                                 // 체크카드 이름 알파벳영역 9개를 검출한 경우
                                 {
                                     result += ("/" + this->DataDiscrimination(                                       // 알파벳 9자리 영역 이미지 인식 실행
-                                            area_of_under_of_numbers, loc3, m_modules[1], m_labels_alphabet));
+                                            area_of_under_of_numbers, loc3, m_modules[1], m_label_alphabet));
                                 }
                             }
                         }
@@ -883,6 +874,4 @@ auto CardFinder::Start(cv::Mat& src) -> std::string
 
     return result;                                                                                                   // 숫자 및 알파벤 인식 결과값 반환
 }
-
-
 
