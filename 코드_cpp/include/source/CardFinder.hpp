@@ -5,8 +5,6 @@
 #include <ThreadPool.hpp>
 #include <torch/script.h>
 
-using Module = torch::jit::script::Module;
-using Lines = std::vector<cv::Vec4f>;
 // Singleton Instance 
 // Java에 CardFinder 인스턴스를 저장 못 하기 때문에
 // 매 프레임마다 인스턴스 초기화를 방지하기 위해 싱글톤을 사용
@@ -25,6 +23,8 @@ public:
     static CardFinder& GetInstance(JNIEnv& env, jobject& obj, int& w, int& h);
     // 영상 분석 시작함수
     auto Start(cv::Mat& src) -> std::string;
+    auto LineExtraction(cv::Mat& src) -> std::vector<std::vector<cv::Vec4f>>;
+    auto AngleExtraction(std::vector<std::vector<cv::Vec4f>>& lines) -> float;
     // 전체 관심영역 반환 함수
     auto GetCapturedArea() -> cv::Rect&;
     // 체크카드를 포착하여 얻은 네 개의 교점을 반환하는 함수
@@ -54,13 +54,11 @@ private:
     // Contrast Limiting Adaptive Histogram Equalization 객체 생성 함수
     auto SetCLAHE(double limit_var, cv::Size tile_size) -> cv::Ptr<cv::CLAHE>;
     // pytorch 모델을 불러오는 함수
-    auto SetTorchModel(JNIEnv& env, jobject& obj, const char* class_dir) -> std::vector<Module>;
+    auto SetTorchModel(JNIEnv& env, jobject& obj, const char* class_dir) -> std::vector<torch::jit::script::Module>;
     // 체크카드의 가로 세로 직선을 얻는 함수
-    auto GetLines(cv::Mat& src, AreaLocation arealoc) -> Lines;
-    // 체크카드의 가로 세로 직선들에서 교점을 구하고 세 점을 이용하여 각도를 얻는 함수
-    auto GetCrossPointFromTwoLines(Lines& line1, Lines& line2)->cv::Point2f;
-    // 두 점이 이루는 각도(체크카드의 기울기)를 구하는 함수
-    auto GetAngleFromTwoPoints(cv::Point2f pt1, cv::Point2f pt2, AreaLocation arealoc) -> float;
+    auto FindLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv::Vec4f>;
+    // 체크카드의 모서리 지점을 찾는 함수
+    auto FindCorner(std::vector<cv::Vec4f>& lines1, std::vector<cv::Vec4f>& lines2) -> cv::Point2f;
     // 최소자승밝기보정을 수행하는 함수
     auto BrightCorrect(cv::Mat& src) -> cv::Mat&;
     // 푸리에 HomomorhpicFitering을 수행하는 함수
@@ -74,7 +72,7 @@ private:
     // 숫자영역들만 추려내는 함수
     virtual auto DataClassification(std::vector<cv::Rect>& rois) -> std::vector<cv::Rect>;
     // 숫자영역을 Pytorch Script를 활용하여 인식하는 함수
-    auto DataDiscrimination(cv::Mat& src, std::vector<cv::Rect>& areas, Module& module, std::map<int, char>& labels) -> std::string;
+    auto DataDiscrimination(cv::Mat& src, std::vector<cv::Rect>& areas, torch::jit::script::Module& module, std::map<int, char>& labels) -> std::string;
 
     // 스레드 갯수
     int m_thread_num;
@@ -84,8 +82,8 @@ private:
     cv::Rect m_captured_area;
     // ImageAnalysis의 roi에서 획득한 교점들의 위치를 보정해주는 스케일팩터
     cv::Point2f m_scale_factor;
-    // 전체 관심영역에서 상단, 좌측, 하단, 우측 관심영역을 생성할 때 필요한 네 개의 교점
-    std::vector<cv::Point2f> m_cross_pt4;
+    // 전체 관심영역에서 우측 및 하단 영역의 시작지점
+    cv::Point m_start_pt_of_right_area, m_start_pt_of_bottom_area;
     // 상단, 좌측, 하단, 우측 관심영역
     std::vector<cv::Rect> m_parts_of_captured_area;
     // 최소자승의 전체영역, 가로, 세로에 해당하는 A 행렬
@@ -103,7 +101,7 @@ private:
     // 전체 관심영역으로 포착된 이미지
     std::vector<jfloat> m_res_coordinate;
     // 레이블
-    std::map<int, char> m_labels_number, m_labels_alphabet;
+    std::map<int, char> m_label_number, m_label_alphabet;
 
 
 protected:
