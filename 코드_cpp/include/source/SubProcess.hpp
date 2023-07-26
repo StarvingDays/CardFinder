@@ -30,7 +30,7 @@ SubProcess& SubProcess::GetInstance(int& w, int& h)
 }
 
 
-//
+
 auto SubProcess::HomomorphicCorrect(cv::Mat& src) -> cv::Mat
 {
     cv::Mat log, complex;
@@ -107,7 +107,7 @@ exit:
 
             for (k = i * 3; k < j - 1; ++k)                                                             // 0~2, 3~5, 6~8에 해당하는 k, k+1 인덱스를 순회하여 길이를 비교하는 for문
             {
-                dist = GetDist(                                                                         // 알파벳간의 간격
+                dist = CalcDist(                                                                        // 알파벳간의 간격
                         cv::Point(areas[k].br().x, areas[k].tl().y), areas[k + 1].tl());
 
                 if (dist < 5)                                                                           // 알파벳간의 간격이 5보다 작을 경우
@@ -118,7 +118,7 @@ exit:
 
             if (j - 1 < 6)
             {
-                dist = GetDist(                                                                         // 2-3, 5-6번째 숫자간의 간격
+                dist = CalcDist(                                                                        // 2-3, 5-6번째 숫자간의 간격
                         cv::Point(areas[j - 1].br().x, areas[j - 1].tl().y), areas[j].tl());            // 알파벳간 사이 간격의 조건이 참이면 count2를 1씩 증가
                 if (dist > 6 && dist < 15) ++count2;
 
