@@ -3,29 +3,27 @@
 #include <opencv2/highgui.hpp>
 
 #include <cmath>
-#include <tuple>
-
 
 
 // 두 점사이의 거리를 구하는 함수
-template<typename T, typename = typename std::enable_if_t<
-        std::is_same<T, int>::value ||
-        std::is_same<T, float>::value ||
-        std::is_same<T, double>::value>>
-T GetDist(cv::Point_<T> pt1, cv::Point_<T> pt2)
+template<template<typename E> class C = cv::Point_, typename T,
+    typename = typename std::enable_if<
+    std::is_arithmetic<T>::value ||
+    std::is_same<std::decay_t<C<T>>, cv::Point_<T>>::value>::type>
+auto CalcDist(C<T> const& pt1, C<T> const& pt2)
 {
+
     return std::sqrt(
-            ((pt1.x - pt2.x) * (pt1.x - pt2.x)) +
-            ((pt1.y - pt2.y) * (pt1.y - pt2.y)));
+        ((pt1.x - pt2.x) * (pt1.x - pt2.x)) +
+        ((pt1.y - pt2.y) * (pt1.y - pt2.y)));
 }
 
-
 // 두 직선(네 개의 점)이 이루는 교점을 얻는 함수
-template<typename T, typename = typename std::enable_if_t<
-        std::is_same<T, int>::value ||
-        std::is_same<T, float>::value ||
-        std::is_same<T, double>::value>>
-auto GetCrossPointFromPT4(cv::Point_<T> pt1, cv::Point_<T> pt2, cv::Point_<T> pt3, cv::Point_<T> pt4)
+template<template<typename E> class C = cv::Point_, typename T,
+    typename = typename std::enable_if<
+    std::is_arithmetic<T>::value ||
+    std::is_same<std::decay_t<C<T>>, cv::Point_<T>>::value>::type>
+C<T> FindCrossPoint(C<T> const& pt1, C<T> const& pt2, C<T> const& pt3, C<T> const& pt4)
 {
     T xChild = {};
     T yChild = {};
@@ -48,42 +46,34 @@ auto GetCrossPointFromPT4(cv::Point_<T> pt1, cv::Point_<T> pt2, cv::Point_<T> pt
         return cv::Point_<T>(0, 0);
     }
 
-    return cv::Point_<T>(xChild / mother, yChild / mother);
+    return C<T>(xChild / mother, yChild / mother);
 }
 
 // 벡터의 내적으로 각도를 구하는 함수
-template<typename T, typename = typename std::enable_if_t<
-        std::is_same<T, int>::value ||
-        std::is_same<T, float>::value ||
-        std::is_same<T, double>::value>>
-T GetAngleFromDotProduct(const cv::Point_<T> pt1, const cv::Point_<T> pt2)
+template<template<typename E> class C = cv::Point_, typename T,
+    typename = typename std::enable_if<
+    std::is_arithmetic<T>::value ||
+    std::is_same<std::decay_t<C<T>>, cv::Point_<T>>::value>::type>
+T FindAngle(C<T> const& pt1, C<T> const& pt2)
 {
     T len1 = std::sqrt(std::pow(pt1.x, 2) + std::pow(pt1.y, 2));                                                        // 두 점사이의 거리를 계산
     T len2 = std::sqrt(std::pow(pt2.x, 2) + std::pow(pt2.y, 2));
     T dotProduct = (pt1.x * pt2.x) + (pt1.y * pt2.y);                                                                   // 벡터 내적 획득
+    T crossProduct = (pt1.x * pt2.y) - (pt1.y * pt2.x);                                                                 // 벡터 외적 획득
+
     T cosine = dotProduct / (len1 * len2);                                                                              // 코사인 각 획득
+    T angle_degree = std::acos(cosine) * (180.0f / CV_PI);                                                              // 아크코사인으로 각도 획득
 
-    return std::acos(cosine) * (180 / CV_PI);                                                                           // 아크코사인으로 각도 획득
+    if (crossProduct < 0) angle_degree = -angle_degree;                                                                 // 벡터 외적이 0보다 작으면 -값으로 변환
+
+
+    return angle_degree;
 }
 
-// 두 점 사이에 target_point가 위치하는 여부를 판별하는 함수
-template<typename T, typename = typename std::enable_if_t<
-        std::is_same<T, int>::value ||
-        std::is_same<T, float>::value ||
-        std::is_same<T, double>::value>>
-auto ComparePosition(cv::Point_<T> pt1, cv::Point_<T> pt2, cv::Point_<T> target_point) -> bool
-{
-    bool is_true = false;
-    if ((target_point.x > pt1.x && target_point.x < pt2.x) && (target_point.y > pt1.y && target_point.y < pt2.y))
-    {
-        is_true = true;
-    }
-    return is_true;
-}
 
 // 90도로 영상을 회전시키는 함수
-template<typename T, int CV_TYPE, typename = typename std::enable_if_t<
-        std::is_same<T, uchar>::value ||
+template<typename T, int CV_TYPE, typename = typename
+        std::enable_if_t<std::is_same<T, uchar>::value ||
         std::is_same<T, cv::Vec3b>::value>>
 cv::Mat Rotate90(cv::Mat& src)
 {
@@ -129,6 +119,7 @@ void Shift(cv::Mat& src)
     {
         cv::Mat tmp;                                                                                                   // 1사분면과 3사분면을 교환
         q0.copyTo(tmp);
+        q0.copyTo(tmp);
         q3.copyTo(q0);
         tmp.copyTo(q3);
 
@@ -159,7 +150,7 @@ cv::Mat PlaceMiddle(cv::Mat src)
 
     cv::Mat result(big * 1.5f, big * 1.5f, src.type(), cv::Scalar(0));                                                  // 정사각형 영상 생성
 
-    cv::Point start = (result.size() - src.size()) / 2;                                                                 // 정사각형 영상에서 숫자 이미지를 위치시킬 시작지점을 계산
+    cv::Point start = (result.size() - src.size()) / 2;                                                                 // 정사각형 영상에서 숫자 이미지를 위치시킬 시작지점을
 
     src.copyTo(                                                                                                         // 숫자이미지를 정사각형 0행렬 영상에 붙여넣기
         result(cv::Rect(start, src.size())));
@@ -173,6 +164,7 @@ cv::Mat PlaceMiddle(cv::Mat src)
 int GetThreadInfo()
 {
     int threadNum = cv::getNumThreads();                                                                                // 스레드 개수 획득
+
 
     if (threadNum > 16)
         threadNum = 8;
