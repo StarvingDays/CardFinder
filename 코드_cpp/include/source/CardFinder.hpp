@@ -11,6 +11,9 @@
 class CardFinder
 {
 public:
+    using Module = torch::jit::script::Module;
+    using Lines = std::vector<cv::Vec4f>;
+    using Rects = std::vector<cv::Rect>;
     // 상단, 좌측, 하단, 우측 영상을 구분하는 enum class
     enum class AreaLocation
     {
@@ -23,8 +26,6 @@ public:
     static CardFinder& GetInstance(JNIEnv& env, jobject& obj, int& w, int& h);
     // 영상 분석 시작함수
     auto Start(cv::Mat& src) -> std::string;
-    auto LineExtraction(cv::Mat& src) -> std::vector<std::vector<cv::Vec4f>>;
-    auto AngleExtraction(std::vector<std::vector<cv::Vec4f>>& lines) -> float;
     // 전체 관심영역 반환 함수
     auto GetCapturedArea() -> cv::Rect&;
     // 체크카드를 포착하여 얻은 네 개의 교점을 반환하는 함수
@@ -54,11 +55,11 @@ private:
     // Contrast Limiting Adaptive Histogram Equalization 객체 생성 함수
     auto SetCLAHE(double limit_var, cv::Size tile_size) -> cv::Ptr<cv::CLAHE>;
     // pytorch 모델을 불러오는 함수
-    auto SetTorchModel(JNIEnv& env, jobject& obj, const char* class_dir) -> std::vector<torch::jit::script::Module>;
+    auto SetTorchModel(JNIEnv& env, jobject& obj, const char* class_dir) -> std::vector<Module>;
     // 체크카드의 가로 세로 직선을 얻는 함수
-    auto FindLines(cv::Mat& src, AreaLocation arealoc) -> std::vector<cv::Vec4f>;
+    auto FindLines(cv::Mat& src, AreaLocation arealoc) -> Lines;
     // 체크카드의 모서리 지점을 찾는 함수
-    auto FindCorner(std::vector<cv::Vec4f>& lines1, std::vector<cv::Vec4f>& lines2) -> cv::Point2f;
+    auto FindCorner(Lines& lines1, Lines& lines2) -> cv::Point2f;
     // 최소자승밝기보정을 수행하는 함수
     auto BrightCorrect(cv::Mat& src) -> cv::Mat&;
     // 푸리에 HomomorhpicFitering을 수행하는 함수
@@ -70,9 +71,9 @@ private:
     // 이진영상에서 객체들을 분류하는 함수
     virtual auto AreaSegmant(cv::Mat& src, int offset_width, int offset_height) -> std::vector<cv::Rect>;
     // 숫자영역들만 추려내는 함수
-    virtual auto DataClassification(std::vector<cv::Rect>& rois) -> std::vector<cv::Rect>;
+    virtual auto DataClassification(Rects& rois) -> Rects;
     // 숫자영역을 Pytorch Script를 활용하여 인식하는 함수
-    auto DataDiscrimination(cv::Mat& src, std::vector<cv::Rect>& areas, torch::jit::script::Module& module, std::map<int, char>& labels) -> std::string;
+    auto DataDiscrimination(cv::Mat& src, Rects& areas, Module& module, std::map<int, char>& labels) -> std::string;
 
     // 스레드 갯수
     int m_thread_num;
@@ -97,7 +98,7 @@ private:
     // 이진영상의 침식 및 확장 연산 사용되는 커널
     cv::Mat m_kernel;
     // 히스토그램 평준화에 사용되는 CLAHE 객체
-    cv::Ptr<cv::CLAHE> m_clahe;
+    std::shared_ptr<cv::CLAHE> m_clahe;
     // 전체 관심영역으로 포착된 이미지
     std::vector<jfloat> m_res_coordinate;
     // 레이블
@@ -111,5 +112,3 @@ protected:
     std::vector<cv::Mat> m_gaussian_filters;
 
 };
-
-
