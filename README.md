@@ -5,6 +5,5 @@
 
 코드_java : androidstudio Activity 코드
 
-코드_python : pytorch 코드
+코드_python : fastAPI를 사용하는 웹서버 영상인식 코드
 
-AndroidStudioProject.7z : CardFinder 전체 안드로이드 스튜디로 프로젝트
