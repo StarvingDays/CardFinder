@@ -116,6 +116,6 @@ private:
     // 스레드 대기용 객체
     std::condition_variable m_conv;
     // 스레드 임계영역 처리용 mutex
-    std::mutex m_mutex;
+    std::mutex m_pulling_jobs_mutex;
 };
 
