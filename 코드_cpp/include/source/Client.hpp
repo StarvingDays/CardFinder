@@ -20,17 +20,8 @@ class Client
 public:
     Client() = delete;
 
-    Client(const char* host, const char* port, const char* target, int http_version)
-        :
-        m_host(host),                                                                       // ip 주소
-        m_port(port),                                                                       // 포트 번호
-        m_target(target),                                                                   // url 타겟
-        m_url_host(host + std::string(":") + port),                                         // ip + port + target
-        m_http_version(http_version),                                                       // http 버전
-        m_timeout(std::chrono::seconds(10))                                                 // 타임아웃 타이머
-    {
-
-    }
+    Client(const char* host, const char* port, const char* target, int http_version);
+    ~Client() = default;
 
     auto SetData(cv::Mat& src) -> void;                                                     // 이미지 데이터를 base64 포멧의 string타입으로 변환하는 함수
     auto IsBufferEmpty() -> bool;                                                           // base64 타입으로 변환된 버퍼가 비어있는 여부를 확인하는 함수
@@ -59,6 +50,19 @@ private:
 
     std::string m_img_data_buffer, m_res_mes;
 };
+
+Client::Client(const char* host, const char* port, const char* target, int http_version)
+        :
+        m_host(host),                                                                       // ip 주소
+        m_port(port),                                                                       // 포트 번호
+        m_target(target),                                                                   // url 타겟
+        m_url_host(host + std::string(":") + port),                                         // ip + port + target
+        m_http_version(http_version),                                                       // http 버전
+        m_timeout(std::chrono::seconds(10))                                                 // 타임아웃 타이머
+{
+
+}
+
 
 bool Client::Connect()
 {
