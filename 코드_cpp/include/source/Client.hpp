@@ -21,6 +21,7 @@ public:
     Client() = delete;
 
     Client(const char* host, const char* port, const char* target, int http_version);
+
     ~Client() = default;
 
     auto SetData(cv::Mat& src) -> void;                                                     // 이미지 데이터를 base64 포멧의 string타입으로 변환하는 함수
@@ -28,7 +29,6 @@ public:
     auto ResetBuffer() -> void;                                                             // base64 타입으로 변환된 버퍼를 비우는 함수
     auto StartAnalysis() -> void;                                                           // 웹서버 통신으로 카드 이미지를 분석하는 함수
     auto GetMessage() -> std::string;                                                       // 웹서버에서 읽어온 reponse 패킷의 body(이미지 분석 결과)를 저장하는 함수
-
     auto Connect() -> bool;                                                                 // 서버 연결 함수
 
 
@@ -40,6 +40,7 @@ private:
 
 
     asio::io_context m_io_context;
+
     tcp::socket m_socket{ m_io_context };
 
     std::string m_host, m_port, m_target, m_url_host;
