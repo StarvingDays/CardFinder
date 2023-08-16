@@ -123,7 +123,7 @@ auto CardFinder::SetPartsOfCapturedArea() -> Rects
     m_start_pt_of_right_area = cross_pt2;
     m_start_pt_of_bottom_area = cross_pt3;
 
-    return std::vector<cv::Rect>() = {
+    return Rects() = {
             cv::Rect(cv::Point(cross_pt1.x, 0), cross_pt2),                                                          // 상단 관심영역
             cv::Rect(pt1, cross_pt3),                                                                                // 좌측 관심영역
             cv::Rect(cross_pt3, cv::Point(cross_pt4.x, pt8.y)),                                                      // 하단 관심영역
