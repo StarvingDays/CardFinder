@@ -15,7 +15,7 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
         m_gaussian_filters(SetGaussianFilters(m_captured_area.size(), 30)),                                          // 가우시안 low, high 필터
         m_pull_thr_on(true),
         m_pull_thr(2),
-        m_client("192.168.0.21", "2005", "/OCR", 11)
+        m_client("0.0.0.0", "0000", "/OCR", 11)
 {
     for(int i = 0; i < m_pull_thr.size(); ++i)
     {
