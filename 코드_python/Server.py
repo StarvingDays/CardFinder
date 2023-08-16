@@ -61,5 +61,5 @@ async def OCR(image_data: DataInput):                                           
         return JSONResponse({'error': str(e)})
 
 if __name__ == "__main__":
-    uvicorn.run("Server:app", host='192.168.0.21', port=2005, reload=True)
+    uvicorn.run("Server:app", host='0.0.0.0', port=0000, reload=True)
 
