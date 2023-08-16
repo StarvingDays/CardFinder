@@ -8,15 +8,15 @@
 #include <future>
 
 // Singleton Instance 
-// Java¿¡ CardFinder ÀÎ½ºÅÏ½º¸¦ ÀúÀå ¸ø ÇÏ±â ¶§¹®¿¡
-// ¸Å ÇÁ·¹ÀÓ¸¶´Ù ÀÎ½ºÅÏ½º ÃÊ±âÈ­¸¦ ¹æÁöÇÏ±â À§ÇØ ½Ì±ÛÅæÀ» »ç¿ë
+// Javaì— CardFinder ì¸ìŠ¤í„´ìŠ¤ë¥¼ ì €ì¥ ëª» í•˜ê¸° ë•Œë¬¸ì—
+// ë§¤ í”„ë ˆì„ë§ˆë‹¤ ì¸ìŠ¤í„´ìŠ¤ ì´ˆê¸°í™”ë¥¼ ë°©ì§€í•˜ê¸° ìœ„í•´ ì‹±ê¸€í†¤ì„ ì‚¬ìš©
 class CardFinder
 {
 public:
     using Lines = std::vector<cv::Vec4f>;
     using Rects = std::vector<cv::Rect>;
     
-    // »ó´Ü, ÁÂÃø, ÇÏ´Ü, ¿ìÃø ¿µ»óÀ» ±¸ºĞÇÏ´Â enum class
+    // ìƒë‹¨, ì¢Œì¸¡, í•˜ë‹¨, ìš°ì¸¡ ì˜ìƒì„ êµ¬ë¶„í•˜ëŠ” enum class
     enum class AreaLocation
     {
         TOP,
@@ -25,97 +25,97 @@ public:
         RIGHT
     };
 
-    // Singleton Instance »ı¼º ÇÔ¼ö
+    // Singleton Instance ìƒì„± í•¨ìˆ˜
     static CardFinder& GetInstance(JNIEnv& env, jobject& obj, int& w, int& h);
-    // ¿µ»ó ºĞ¼® ½ÃÀÛÇÔ¼ö
+    // ì˜ìƒ ë¶„ì„ ì‹œì‘í•¨ìˆ˜
     auto Start(unsigned char* data, jint& col, jint& row) -> void;
-    // ÀüÃ¼ °ü½É¿µ¿ª ¹İÈ¯ ÇÔ¼ö
-    // Ã¼Å©Ä«µå¸¦ Æ÷ÂøÇÏ¿© ¾òÀº ³× °³ÀÇ ±³Á¡À» ¹İÈ¯ÇÏ´Â ÇÔ¼ö
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­ ë°˜í™˜ í•¨ìˆ˜
+    // ì²´í¬ì¹´ë“œë¥¼ í¬ì°©í•˜ì—¬ ì–»ì€ ë„¤ ê°œì˜ êµì ì„ ë°˜í™˜í•˜ëŠ” í•¨ìˆ˜
     auto GetCoordinates() -> std::vector<float>;
-    // ³× °³ÀÇ ±³Á¡ µ¥ÀÌÅÍ°¡ ÀúÀåµÈ °´Ã¼¸¦ ÃÊ±âÈ­ÇÏ´Â ÇÔ¼ö
+    // ë„¤ ê°œì˜ êµì  ë°ì´í„°ê°€ ì €ì¥ëœ ê°ì²´ë¥¼ ì´ˆê¸°í™”í•˜ëŠ” í•¨ìˆ˜
     auto ResetCoordinates() -> void;
-    // m_client¿¡ ÀúÀåµÈ base64 Æ÷¸ä ¹öÆÛ¸¦ ÃÊ±âÈ­ÇÏ´Â ÇÔ¼ö
+    // m_clientì— ì €ì¥ëœ base64 í¬ë©§ ë²„í¼ë¥¼ ì´ˆê¸°í™”í•˜ëŠ” í•¨ìˆ˜
     auto ResetClientBuffer() -> void;
     auto ResetStopImagePreprocessingBool() -> void;
     auto IsEmptyBuffer() -> bool;
 
-    // ºĞ¼®°á°ú ¹İÈ¯ÇÔ¼ö
+    // ë¶„ì„ê²°ê³¼ ë°˜í™˜í•¨ìˆ˜
     auto GetResult() -> std::string;
 
     auto PullJobs() -> void;
-    // ¼Ò¸êÀÚ
+    // ì†Œë©¸ì
     ~CardFinder();
 
 
 private:
-    // CardFinder Instance »ı¼ºÀÚ
+    // CardFinder Instance ìƒì„±ì
     CardFinder(JNIEnv& env, jobject& obj, int& w, int& h);
-    // android studio java PreviewViewÀÇ roi size¸¦ È¹µæÇÏ´Â ÇÔ¼ö
+    // android studio java PreviewViewì˜ roi sizeë¥¼ íšë“í•˜ëŠ” í•¨ìˆ˜
     auto GetImageViewSize(JNIEnv& env, jobject& obj, const char* class_dir) -> cv::Size;
-    // ÀüÃ¼ °ü½É¿µ¿ªÀ» È¹µæÇÏ´Â ÇÔ¼ö
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­ì„ íšë“í•˜ëŠ” í•¨ìˆ˜
     auto SetCapturedArea(int w, int h) -> cv::Rect;
-    // ½ºÄÉÀÏÆÑÅÍ¸¦ °è»êÇÏ´Â ÇÔ¼ö
+    // ìŠ¤ì¼€ì¼íŒ©í„°ë¥¼ ê³„ì‚°í•˜ëŠ” í•¨ìˆ˜
     auto SetScaleFactor(int w, int h) -> cv::Point2f;
-    // ºÎºĞ°ü½É¿µ¿ª(°¡·Î, ¼¼·Î)À» È¹µæÇÏ´Â ÇÔ¼ö
-    auto SetPartsOfCapturedArea() -> std::vector<cv::Rect>;
-    // ÃÖ¼ÒÀÚ½Â¹à±âº¸Á¤¿¡ »ç¿ëµÇ´Â Çà·ÄÀ» ¸¸µå´Â ÇÔ¼ö
+    // ë¶€ë¶„ê´€ì‹¬ì˜ì—­(ê°€ë¡œ, ì„¸ë¡œ)ì„ íšë“í•˜ëŠ” í•¨ìˆ˜
+    auto SetPartsOfCapturedArea() -> Rects;
+    // ìµœì†ŒììŠ¹ë°ê¸°ë³´ì •ì— ì‚¬ìš©ë˜ëŠ” í–‰ë ¬ì„ ë§Œë“œëŠ” í•¨ìˆ˜
     auto SetBrightCorrectionModel() -> cv::Mat;
-    // ÃÖ¼ÒÀÚ½Â¹à±âº¸Á¤ÀÇ °á°ú ¿µ»óÀ» ´ãÀ» vector<Mat> Å¸ÀÔÀÇ µ¥ÀÌÅÍ¸¦ ¸¸µå´Â ÇÔ¼ö
+    // ìµœì†ŒììŠ¹ë°ê¸°ë³´ì •ì˜ ê²°ê³¼ ì˜ìƒì„ ë‹´ì„ vector<Mat> íƒ€ì…ì˜ ë°ì´í„°ë¥¼ ë§Œë“œëŠ” í•¨ìˆ˜
     auto SetBrightCorrectionFields() -> cv::Mat;
-    // Çª¸®¿¡ º¯È¯¿¡ »ç¿ëµÇ´Â °¡¿ì½Ã¾È ÇÊÅÍ¸¦ ¸¸µå´Â ÇÔ¼ö
+    // í‘¸ë¦¬ì— ë³€í™˜ì— ì‚¬ìš©ë˜ëŠ” ê°€ìš°ì‹œì•ˆ í•„í„°ë¥¼ ë§Œë“œëŠ” í•¨ìˆ˜
     auto SetGaussianFilters(cv::Size size, double D0) -> std::vector<cv::Mat>;
-    // ³× °³ÀÇ ±³Á¡¿¡ Scale factor¸¦ °öÇÏ´Â ÇÔ¼ö
+    // ë„¤ ê°œì˜ êµì ì— Scale factorë¥¼ ê³±í•˜ëŠ” í•¨ìˆ˜
     auto SetCoordinates(cv::Point2f& pt1, cv::Point2f& pt2, cv::Point2f& pt3, cv::Point2f& pt4) -> void;
-    // Contrast Limiting Adaptive Histogram Equalization °´Ã¼ »ı¼º ÇÔ¼ö
+    // Contrast Limiting Adaptive Histogram Equalization ê°ì²´ ìƒì„± í•¨ìˆ˜
     auto SetCLAHE(double limit_var, cv::Size tile_size) -> cv::Ptr<cv::CLAHE>;
-    // Ã¼Å©Ä«µåÀÇ °¡·Î ¼¼·Î Á÷¼±À» ¾ò´Â ÇÔ¼ö
+    // ì²´í¬ì¹´ë“œì˜ ê°€ë¡œ ì„¸ë¡œ ì§ì„ ì„ ì–»ëŠ” í•¨ìˆ˜
     auto FindLines(cv::Mat& src, AreaLocation arealoc) -> Lines;
-    // Ã¼Å©Ä«µåÀÇ ¸ğ¼­¸® ÁöÁ¡À» Ã£´Â ÇÔ¼ö
+    // ì²´í¬ì¹´ë“œì˜ ëª¨ì„œë¦¬ ì§€ì ì„ ì°¾ëŠ” í•¨ìˆ˜
     auto FindCorner(Lines& lines1, Lines& lines2) -> cv::Point2f;
-    // ÃÖ¼ÒÀÚ½Â¹à±âº¸Á¤À» ¼öÇàÇÏ´Â ÇÔ¼ö
+    // ìµœì†ŒììŠ¹ë°ê¸°ë³´ì •ì„ ìˆ˜í–‰í•˜ëŠ” í•¨ìˆ˜
     auto BrightCorrect(cv::Mat& src) -> cv::Mat&;
-    // Çª¸®¿¡ HomomorhpicFiteringÀ» ¼öÇàÇÏ´Â ÇÔ¼ö
+    // í‘¸ë¦¬ì— HomomorhpicFiteringì„ ìˆ˜í–‰í•˜ëŠ” í•¨ìˆ˜
     auto HomomorphicCorrect(cv::Mat& src, cv::Mat& filter) -> cv::Mat;
 
-    // android studio java analize ÇÔ¼ö¿¡¼­ ¹Ş¾Æ¿À´Â ImageProxy ÀÎ½ºÅÏ½ºÀÇ °¡·Î ¼¼·Î »çÀÌÁî
+    // android studio java analize í•¨ìˆ˜ì—ì„œ ë°›ì•„ì˜¤ëŠ” ImageProxy ì¸ìŠ¤í„´ìŠ¤ì˜ ê°€ë¡œ ì„¸ë¡œ ì‚¬ì´ì¦ˆ
     cv::Size m_image_view_size;
-    // android studio java PreviewViewÀÇ roi size
+    // android studio java PreviewViewì˜ roi size
     cv::Size m_image_proxy_size;
-    // ÀüÃ¼ °ü½É¿µ¿ª
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­
     cv::Rect m_captured_area;
-    // ImageAnalysisÀÇ roi¿¡¼­ È¹µæÇÑ ±³Á¡µéÀÇ À§Ä¡¸¦ º¸Á¤ÇØÁÖ´Â ½ºÄÉÀÏÆÑÅÍ
+    // ImageAnalysisì˜ roiì—ì„œ íšë“í•œ êµì ë“¤ì˜ ìœ„ì¹˜ë¥¼ ë³´ì •í•´ì£¼ëŠ” ìŠ¤ì¼€ì¼íŒ©í„°
     cv::Point2f m_scale_factor;
-    // ÀüÃ¼ °ü½É¿µ¿ª¿¡¼­ ¿ìÃø ¹× ÇÏ´Ü ¿µ¿ªÀÇ ½ÃÀÛÁöÁ¡
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­ì—ì„œ ìš°ì¸¡ ë° í•˜ë‹¨ ì˜ì—­ì˜ ì‹œì‘ì§€ì 
     cv::Point m_start_pt_of_right_area, m_start_pt_of_bottom_area;
-    // »ó´Ü, ÁÂÃø, ÇÏ´Ü, ¿ìÃø °ü½É¿µ¿ª
-    std::vector<cv::Rect> m_parts_of_captured_area;
-    // ÃÖ¼ÒÀÚ½ÂÀÇ ÀüÃ¼¿µ¿ª, °¡·Î, ¼¼·Î¿¡ ÇØ´çÇÏ´Â A Çà·Ä
+    // ìƒë‹¨, ì¢Œì¸¡, í•˜ë‹¨, ìš°ì¸¡ ê´€ì‹¬ì˜ì—­
+    Rects m_parts_of_captured_area;
+    // ìµœì†ŒììŠ¹ì˜ ì „ì²´ì˜ì—­, ê°€ë¡œ, ì„¸ë¡œì— í•´ë‹¹í•˜ëŠ” A í–‰ë ¬
     cv::Mat m_A;
-    // ÃÖ¼ÒÀÚ½Â ¹à±â º¸Á¤ÀÇ °á°ú°¡ ´ã±â´Â ÀüÃ¼, °¡·Î, ¼¼·Î, ¿µ¿ªÀÇ Mat Å¸ÀÔ ÀÌ¹ÌÁö
+    // ìµœì†ŒììŠ¹ ë°ê¸° ë³´ì •ì˜ ê²°ê³¼ê°€ ë‹´ê¸°ëŠ” ì „ì²´, ê°€ë¡œ, ì„¸ë¡œ, ì˜ì—­ì˜ Mat íƒ€ì… ì´ë¯¸ì§€
     cv::Mat m_br_correction_field;
-    // ÀÌÁø¿µ»óÀÇ Ä§½Ä ¹× È®Àå ¿¬»ê »ç¿ëµÇ´Â Ä¿³Î
+    // ì´ì§„ì˜ìƒì˜ ì¹¨ì‹ ë° í™•ì¥ ì—°ì‚° ì‚¬ìš©ë˜ëŠ” ì»¤ë„
     cv::Mat m_kernel;
-    // È÷½ºÅä±×·¥ ÆòÁØÈ­¿¡ »ç¿ëµÇ´Â CLAHE °´Ã¼
+    // íˆìŠ¤í† ê·¸ë¨ í‰ì¤€í™”ì— ì‚¬ìš©ë˜ëŠ” CLAHE ê°ì²´
     std::shared_ptr<cv::CLAHE> m_clahe;
-    // °¡¿ì½Ã¾È ÀúÁÖÆÄ ¹× °íÁÖÆÄ ÇÊÅÍ
+    // ê°€ìš°ì‹œì•ˆ ì €ì£¼íŒŒ ë° ê³ ì£¼íŒŒ í•„í„°
     std::vector<cv::Mat> m_gaussian_filters;
-    // ÀüÃ¼ °ü½É¿µ¿ªÀ¸·Î Æ÷ÂøµÈ ÀÌ¹ÌÁö
+    // ì „ì²´ ê´€ì‹¬ì˜ì—­ìœ¼ë¡œ í¬ì°©ëœ ì´ë¯¸ì§€
     std::vector<jfloat> m_res_coordinate;
-    // Å¬¶óÀÌ¾ğÆ®
+    // í´ë¼ì´ì–¸íŠ¸
     Client m_client;
-    // json Æ÷¸äÀÇ response ÆĞÅ¶ÀÇ body ¸Ş¼¼Áö°¡ ÀúÀåµÇ´Â string °´Ã¼
+    // json í¬ë©§ì˜ response íŒ¨í‚·ì˜ body ë©”ì„¸ì§€ê°€ ì €ì¥ë˜ëŠ” string ê°ì²´
     std::string m_result;
-    // ÀÌ¹ÌÁö ÀüÃ³¸® Áß´Ü¿ë atomic<bool>
+    // ì´ë¯¸ì§€ ì „ì²˜ë¦¬ ì¤‘ë‹¨ìš© atomic<bool>
     std::atomic_bool m_stop_image_preprocessing;
-    // pulling ½º·¹µå ³»ºÎÀÇ while ·çÇÁ¿ë atomic<bool>
+    // pulling ìŠ¤ë ˆë“œ ë‚´ë¶€ì˜ while ë£¨í”„ìš© atomic<bool>
     std::atomic_bool m_pull_thr_on;
-    // ÀÌ¹ÌÁö ÀüÃ³¸® ÀÛ¾÷ Å¥
+    // ì´ë¯¸ì§€ ì „ì²˜ë¦¬ ì‘ì—… í
     std::queue<std::future<void>> m_image_preprocessing_jobs;
-    // task queue pulling ½º·¹µå
+    // task queue pulling ìŠ¤ë ˆë“œ
     std::vector<std::thread> m_pull_thr;
-    // ½º·¹µå ´ë±â¿ë °´Ã¼
+    // ìŠ¤ë ˆë“œ ëŒ€ê¸°ìš© ê°ì²´
     std::condition_variable m_conv;
-    // ½º·¹µå ÀÓ°è¿µ¿ª Ã³¸®¿ë mutex
+    // ìŠ¤ë ˆë“œ ì„ê³„ì˜ì—­ ì²˜ë¦¬ìš© mutex
     std::mutex m_mutex;
 };
 
