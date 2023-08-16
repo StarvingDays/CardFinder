@@ -29,12 +29,12 @@ public:
     auto ResetBuffer() -> void;                                                             // base64 타입으로 변환된 버퍼를 비우는 함수
     auto StartAnalysis() -> void;                                                           // 웹서버 통신으로 카드 이미지를 분석하는 함수
     auto GetMessage() -> std::string;                                                       // 웹서버에서 읽어온 reponse 패킷의 body(이미지 분석 결과)를 저장하는 함수
-    auto Connect() -> bool;                                                                 // 서버 연결 함수
+    auto ConnectToServer() -> bool;                                                                 // 서버 연결 함수
 
 
 
 private:
-    auto Run() -> void;
+    auto StayUntilComplete() -> void;
     auto Read() -> void;                                                                    // 웹 서버로 부터 response을 받아 body 데이터를 읽는 함수
     auto Write() -> void;                                                                   // 웹 서버로 request 패킷을 전송하는 함수
 
@@ -65,7 +65,7 @@ Client::Client(const char* host, const char* port, const char* target, int http_
 }
 
 
-bool Client::Connect()
+bool Client::ConnectToServer()
 {
     auto endpoints = tcp::resolver(m_io_context).resolve(m_host, m_port);                   // 엔드포인트 생성 0.0.0.0:9999
     bool is_connected;                                                                      // 서버 연결 확인 bool 값
@@ -84,7 +84,7 @@ bool Client::Connect()
         });
 
 
-    Run();                                                                                  // 서버 연결 시 데드라인 타이머를 설정하여 특정 시간이 지나도 서버 연결이 지연 될 시 연결 시도를 종료한다
+    StayUntilComplete();                                                                    // 서버 연결 시 데드라인 타이머를 설정하여 특정 시간이 지나도 서버 연결이 지연 될 시 연결 시도를 종료한다
 
     return is_connected;
 }
@@ -125,7 +125,7 @@ auto Client::Write() -> void
                 if (res_error) m_res_mes = "Write Failed!";
             });
 
-        Run();                                                                              // 송신완료 될 때까지 대기
+        StayUntilComplete();                                                                // 송신완료 될 때까지 대기
     }
 }
 
@@ -144,7 +144,7 @@ auto Client::Read() -> void
                  m_res_mes = res_error.message();
          });
 
-    Run();                                                                                  // 읽기 완료 될 때까지 대기
+    StayUntilComplete();                                                                    // 읽기 완료 될 때까지 대기
 }
 
 auto Client::SetData(cv::Mat& src) -> void
