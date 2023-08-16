@@ -368,8 +368,6 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     }
 
     
-    public String GetFileDir() { return getFilesDir().toString(); }                                                      // 어플리케이션 파일 디렉토리 경로를 반환하는 함수         
-    
     public int[] GetImageViewSize(){ return new int[]{m_image_view_w, m_image_view_h};}                                  // ImageView의 가로 세로 길이를 반환하는 함수
 }
 
