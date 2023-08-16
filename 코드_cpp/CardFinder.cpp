@@ -25,7 +25,7 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
             {
                 std::future<void> job;
                 {
-                    std::unique_lock<std::mutex> lcok(m_mutex);                                                      // 임계 영역 설정
+                    std::unique_lock<std::mutex> lcok(m_pulling_jobs_mutex);                                         // 임계 영역 설정
                     m_conv.wait(lcok, [this]{ return !m_image_preprocessing_jobs.empty(); });                        // m_processing_jobs 버퍼가 비어있는 경우 모든 스레드를 대기시킨다
                     job = std::move(m_image_preprocessing_jobs.front());                                             // 대기상태에서 꺠어난 스레드가 로컬 future 변수(job)에 버퍼에 있는 future 객체의 소유권을 이전한다
                     m_image_preprocessing_jobs.pop();                                                                // queue 맨 앞쪽 객체 제거
