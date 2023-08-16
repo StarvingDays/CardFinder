@@ -9,7 +9,7 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
         m_scale_factor(SetScaleFactor(w, h)),                                                                        // 관심영역에 놓일 교점의 위치비율을 보정하는 스케일 팩터
         m_parts_of_captured_area(SetPartsOfCapturedArea()),                                                          // 부분영역(가로, 세로)
         m_A(SetBrightCorrectionModel()),                                                                             // 최소자승 A행렬들(전체영역, 가로영역, 세로영역)
-        m_br_correction_field(SetBrightCorrectionField()),                                                          // 최소자승 보정으로 인한 결과 영상을 저장하는 영상(전체영역, 가로영역, 세로영역)
+        m_br_correction_field(SetBrightCorrectionField()),                                                           // 최소자승 보정으로 인한 결과 영상을 저장하는 영상(전체영역, 가로영역, 세로영역)
         m_kernel(cv::getStructuringElement(cv::MORPH_CROSS, cv::Size(3, 3))),                                        // 침식 및 확장 연산시 사용되는 커널
         m_clahe(SetCLAHE(4.0, cv::Size(8, 8))),                                                                      // 명암 보정에 쓰이는 CLAHE 객체
         m_gaussian_filters(SetGaussianFilters(m_captured_area.size(), 30)),                                          // 가우시안 low, high 필터
