@@ -61,7 +61,7 @@ private:
     // 최소자승밝기보정에 사용되는 행렬을 만드는 함수
     auto SetBrightCorrectionModel() -> cv::Mat;
     // 최소자승밝기보정의 결과 영상을 담을 vector<Mat> 타입의 데이터를 만드는 함수
-    auto SetBrightCorrectionFields() -> cv::Mat;
+    auto SetBrightCorrectionField() -> cv::Mat;
     // 푸리에 변환에 사용되는 가우시안 필터를 만드는 함수
     auto SetGaussianFilters(cv::Size size, double D0) -> std::vector<cv::Mat>;
     // 네 개의 교점에 Scale factor를 곱하는 함수
