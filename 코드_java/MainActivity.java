@@ -34,7 +34,6 @@ public class MainActivity extends AppCompatActivity {
     private static final int PERMISSION_REQUEST_CODE = 1234;
     private Button m_view_button, m_clear_button, m_exit_button;                                    // 메튜 버튼, 지우기 버튼, 종료버튼
     private TextView m_number_text_view, m_name_text_view, m_valid_text_view;                       // 체크카드 숫자결과 텍스트뷰, 체크카드 이름 텍스트 뷰
-    private String m_self_dir;                                                                      // 파이토치 모델을 저장할 경로
     private String m_manifest_write = Manifest.permission.WRITE_EXTERNAL_STORAGE;                   // 외부 저장소 쓰기 사용 권한
     private String m_manifest_read = Manifest.permission.READ_EXTERNAL_STORAGE;                     // 외부 저장소 읽기 사용 권한
     private String m_manifest_camera = CAMERA;                                                      // 카메라 사용 권한
@@ -90,14 +89,13 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        m_self_dir = getFilesDir().getPath();                                                       // 어플리케이션의 파일디렉토리의 경로를 받아온다
 
-        m_number_text_view = (TextView) findViewById(R.id.numaber_text);                                  // 특정 안드로이드의 뷰를 view id를 통해 받아온다
+        m_number_text_view = (TextView) findViewById(R.id.numaber_text);                            // 특정 안드로이드의 뷰를 view id를 통해 받아온다
         m_name_text_view = (TextView) findViewById(R.id.name_text);
         m_valid_text_view = (TextView) findViewById(R.id.valid_text);
 
-        m_view_button = (Button) findViewById(R.id.view_button);                                     // view activity로 전환하는 버튼
-        m_clear_button = (Button) findViewById(R.id.clear_button);                                   // 분석결과 문자를 지우는 버튼
+        m_view_button = (Button) findViewById(R.id.view_button);                                    // view activity로 전환하는 버튼
+        m_clear_button = (Button) findViewById(R.id.clear_button);                                  // 분석결과 문자를 지우는 버튼
         m_exit_button = (Button) findViewById(R.id.exit_button);
 
         m_view_button.setOnClickListener(new View.OnClickListener()                                 // view 버튼에 클릭 함수 등록 : view Activity로 진입한다
