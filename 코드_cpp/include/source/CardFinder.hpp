@@ -36,7 +36,7 @@ public:
     auto ResetCoordinates() -> void;
     // m_client에 저장된 base64 포멧 버퍼를 초기화하는 함수
     auto ResetClientBuffer() -> void;
-    auto ResetStopImageProcessingBool() -> void;
+    auto ResetStopImageProcessing() -> void;
     auto IsEmptyBuffer() -> bool;
 
     // 분석결과 반환함수
