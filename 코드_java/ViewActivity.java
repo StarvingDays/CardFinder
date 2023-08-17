@@ -85,7 +85,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     private native boolean IsEmptyClientBuffer(int width, int height);                          // 클라이언트 내부 버퍼가 비어있는 여부를 확인하는 JNI native 함수
     private native String GetResult();
     private native void SetDefaultValue(int width, int height);
-    private native void PullJobs(int width, int height);                                        // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
+    private native void PullTasks(int width, int height);                                       // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
 
     Executor getExecutor() {                                                                    // 특정 테스크를 비동기적으로 실행시키기 위한
         return ContextCompat.getMainExecutor(this);
@@ -252,7 +252,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
 
         if(m_executor_on)
         {
-            PullJobs(m_imageAnalysis_height, m_imageAnalysis_width);                                                     // ViewActivity 호출 시 CardFinder Task를 모두 비운다
+            PullTasks(m_imageAnalysis_height, m_imageAnalysis_width);                                                    // ViewActivity 호출 시 CardFinder Task를 모두 비운다
             SetDefaultValue(m_imageAnalysis_height, m_imageAnalysis_width);                                              // CardFinder 인스턴스의 초기값 설정
 
             m_pool.execute(new Runnable() {
