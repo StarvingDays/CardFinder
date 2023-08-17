@@ -621,9 +621,9 @@ auto CardFinder::ResetClientBuffer() -> void
     }
 }
 
-auto CardFinder::ResetStopImageProcessingBool() -> void
+auto CardFinder::ResetStopImageProcessing() -> void
 {
-    m_stop_image_processing.store(false);                                                                                 // 이미지 전처리용 atomic<bool> 객체 초기화
+    m_stop_image_processing.store(false);                                                                                  // 이미지 전처리용 atomic<bool> 객체 초기화
 }
 
 auto CardFinder::IsEmptyBuffer() -> bool
