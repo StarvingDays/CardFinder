@@ -25,10 +25,10 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
             {
                 std::future<void> job;
                 {
-                    std::unique_lock<std::mutex> lcok(m_pulling_jobs_mutex);                                         // 임계 영역 설정
-                    m_conv.wait(lcok, [this]{ return !m_image_preprocessing_jobs.empty(); });                        // m_processing_jobs 버퍼가 비어있는 경우 모든 스레드를 대기시킨다
-                    job = std::move(m_image_preprocessing_jobs.front());                                             // 대기상태에서 꺠어난 스레드가 로컬 future 변수(job)에 버퍼에 있는 future 객체의 소유권을 이전한다
-                    m_image_preprocessing_jobs.pop();                                                                // queue 맨 앞쪽 객체 제거
+                    std::unique_lock<std::mutex> lcok(m_pulling_tasks_mutex);                                        // 임계 영역 설정
+                    m_conv.wait(lcok, [this]{ return !m_image_processing_tasks.empty(); });                          // m_processing_tasks 버퍼가 비어있는 경우 모든 스레드를 대기시킨다
+                    job = std::move(m_image_processing_tasks.front());                                               // 대기상태에서 꺠어난 스레드가 로컬 future 변수(job)에 버퍼에 있는 future 객체의 소유권을 이전한다
+                    m_image_processing_tasks.pop();                                                                  // queue 맨 앞쪽 객체 제거
                 }
                 job.get();                                                                                           // 로컬 future 객체 실행
             }
@@ -422,13 +422,13 @@ auto CardFinder::HomomorphicCorrect(cv::Mat& src, cv::Mat& filter) -> cv::Mat
 
 auto CardFinder::Start(unsigned char* data, jint& col, jint& row) -> void
 {
-    if(m_stop_image_preprocessing.load(std::memory_order_release) == false)                                                  // m_atom_bool값이 true일 경우 영상 전처리 실행
+    if(m_stop_image_processing.load(std::memory_order_release) == false)                                                   // m_atom_bool값이 true일 경우 영상 전처리 실행
     {
         std::mutex m;
         {
             std::lock_guard<std::mutex>lock1(m);
 
-            m_image_preprocessing_jobs.push(std::async(std::launch::async, [this](std::vector<unsigned char>&& img_buffur)   // 이미지 전처리 및 기타 연산들을 std::async를 사용하여 비동기로 실행한다
+            m_image_processing_tasks.push(std::async(std::launch::async, [this](std::vector<unsigned char>&& img_buffur)   // 이미지 전처리 및 기타 연산들을 std::async를 사용하여 비동기로 실행한다
             {
                 try
                 {
@@ -555,7 +555,7 @@ auto CardFinder::Start(unsigned char* data, jint& col, jint& row) -> void
                                     {
                                         std::lock_guard<std::mutex> lock(m);                                                 // 한 개의 스레드만 접근 하도록 lock 실행
 
-                                        if(m_stop_image_preprocessing.load(std::memory_order_release) == false)
+                                        if(m_stop_image_processing.load(std::memory_order_release) == false)
                                         {
                                             pt1 = cv::Point2f(captured_height - 1 - pt1.y, pt1.x);                           // pt1을 시계방향으로 90도 회전
                                             pt2 = cv::Point2f(captured_height - 1 - pt2.y, pt2.x);                           // pt2을 시계방향으로 90도 회전
@@ -566,7 +566,7 @@ auto CardFinder::Start(unsigned char* data, jint& col, jint& row) -> void
 
                                             m_client.SetData(img);                                                           // 이미지 데이터를 client 인스턴스에 base64 포멧으로 변환하여 저장
 
-                                            m_stop_image_preprocessing.store(true, std::memory_order_release);               // m_atom_bool을 false로 저장하여 추가로 영상 데이터가 저장되는 것을 막는다
+                                            m_stop_image_processing.store(true, std::memory_order_release);               // m_atom_bool을 false로 저장하여 추가로 영상 데이터가 저장되는 것을 막는다
                                         }
                                     }
                                 }
@@ -587,12 +587,12 @@ auto CardFinder::Start(unsigned char* data, jint& col, jint& row) -> void
 
 auto CardFinder::PullJobs() -> void
 {
-    m_stop_image_preprocessing.store(true, std::memory_order_release);
+    m_stop_image_processing.store(true, std::memory_order_release);
 
     std::mutex m;
     std::lock_guard<std::mutex> lock(m);
     {
-        while(!m_image_preprocessing_jobs.empty())                                                                           // task queue가 비어있을 때 까지 while 루프 실행
+        while(!m_image_processing_tasks.empty())                                                                           // task queue가 비어있을 때 까지 while 루프 실행
         {
 
         }
@@ -621,9 +621,9 @@ auto CardFinder::ResetClientBuffer() -> void
     }
 }
 
-auto CardFinder::ResetStopImagePreprocessingBool() -> void
+auto CardFinder::ResetStopImageProcessingBool() -> void
 {
-    m_stop_image_preprocessing.store(false);                                                                                 // 이미지 전처리용 atomic<bool> 객체 초기화
+    m_stop_image_processing.store(false);                                                                                 // 이미지 전처리용 atomic<bool> 객체 초기화
 }
 
 auto CardFinder::IsEmptyBuffer() -> bool
@@ -650,7 +650,7 @@ Java_com_sjlee_cardfinder_ViewActivity_GetResult(JNIEnv *env, jobject thiz)
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_ImagePreProcessing(
+Java_com_sjlee_cardfinder_ViewActivity_ImageProcessing(
         JNIEnv *env, jobject thiz, jbyteArray array, jint width, jint height)
 {
 
@@ -703,7 +703,7 @@ Java_com_sjlee_cardfinder_ViewActivity_SetDefaultValue(
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
                                                                                                                              // 초기값 설정
     instance.ResetCoordinates();
-    instance.ResetStopImagePreprocessingBool();
+    instance.ResetStopImageProcessingBool();
     instance.ResetClientBuffer();
 }
 
