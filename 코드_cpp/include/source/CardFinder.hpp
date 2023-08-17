@@ -36,13 +36,13 @@ public:
     auto ResetCoordinates() -> void;
     // m_client에 저장된 base64 포멧 버퍼를 초기화하는 함수
     auto ResetClientBuffer() -> void;
-    auto ResetStopImagePreprocessingBool() -> void;
+    auto ResetStopImageProcessingBool() -> void;
     auto IsEmptyBuffer() -> bool;
 
     // 분석결과 반환함수
     auto GetResult() -> std::string;
 
-    auto PullJobs() -> void;
+    auto PullTasks() -> void;
     // 소멸자
     ~CardFinder();
 
@@ -106,16 +106,16 @@ private:
     // json 포멧의 response 패킷의 body 메세지가 저장되는 string 객체
     std::string m_result;
     // 이미지 전처리 중단용 atomic<bool>
-    std::atomic_bool m_stop_image_preprocessing;
+    std::atomic_bool m_stop_image_processing;
     // pulling 스레드 내부의 while 루프용 atomic<bool>
     std::atomic_bool m_pull_thr_on;
     // 이미지 전처리 작업 큐
-    std::queue<std::future<void>> m_image_preprocessing_jobs;
+    std::queue<std::future<void>> m_image_processing_tasks;
     // task queue pulling 스레드
     std::vector<std::thread> m_pull_thr;
     // 스레드 대기용 객체
     std::condition_variable m_conv;
     // 스레드 임계영역 처리용 mutex
-    std::mutex m_pulling_jobs_mutex;
+    std::mutex m_pulling_tasks_mutex;
 };
 
