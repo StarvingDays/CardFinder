@@ -585,7 +585,7 @@ auto CardFinder::Start(unsigned char* data, jint& col, jint& row) -> void
     }
 }
 
-auto CardFinder::PullJobs() -> void
+auto CardFinder::PullTasks() -> void
 {
     m_stop_image_processing.store(true, std::memory_order_release);
 
@@ -686,12 +686,12 @@ Java_com_sjlee_cardfinder_ViewActivity_GetCoordinates(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_PullJobs(
+Java_com_sjlee_cardfinder_ViewActivity_PullTasks(
         JNIEnv *env, jobject thiz, jint width, jint height)
 {
 
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
-    instance.PullJobs();                                                                                                     // task queue가 비어있을 때 까지 대기
+    instance.PullTasks();                                                                                                     // task queue가 비어있을 때 까지 대기
 }
 
 extern "C"
