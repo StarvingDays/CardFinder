@@ -566,7 +566,7 @@ auto CardFinder::Start(unsigned char* data, jint& col, jint& row) -> void
 
                                             m_client.SetData(img);                                                           // 이미지 데이터를 client 인스턴스에 base64 포멧으로 변환하여 저장
 
-                                            m_stop_image_processing.store(true, std::memory_order_release);               // m_atom_bool을 false로 저장하여 추가로 영상 데이터가 저장되는 것을 막는다
+                                            m_stop_image_processing.store(true, std::memory_order_release);                  // m_atom_bool을 false로 저장하여 추가로 영상 데이터가 저장되는 것을 막는다
                                         }
                                     }
                                 }
@@ -592,7 +592,7 @@ auto CardFinder::PullTasks() -> void
     std::mutex m;
     std::lock_guard<std::mutex> lock(m);
     {
-        while(!m_image_processing_tasks.empty())                                                                           // task queue가 비어있을 때 까지 while 루프 실행
+        while(!m_image_processing_tasks.empty())                                                                             // task queue가 비어있을 때 까지 while 루프 실행
         {
 
         }
@@ -623,7 +623,7 @@ auto CardFinder::ResetClientBuffer() -> void
 
 auto CardFinder::ResetStopImageProcessing() -> void
 {
-    m_stop_image_processing.store(false);                                                                                  // 이미지 전처리용 atomic<bool> 객체 초기화
+    m_stop_image_processing.store(false);                                                                                    // 이미지 전처리용 atomic<bool> 객체 초기화
 }
 
 auto CardFinder::IsEmptyBuffer() -> bool
@@ -691,7 +691,7 @@ Java_com_sjlee_cardfinder_ViewActivity_PullTasks(
 {
 
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
-    instance.PullTasks();                                                                                                     // task queue가 비어있을 때 까지 대기
+    instance.PullTasks();                                                                                                    // task queue가 비어있을 때 까지 대기
 }
 
 extern "C"
