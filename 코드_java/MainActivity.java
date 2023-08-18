@@ -195,12 +195,12 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) // 퍼미션 요청의 결과를 확인하는 함수
     {
         if (requestCode == PERMISSION_REQUEST_CODE)
-            if((grantResults.length > 0)
-                    && (grantResults[0] + grantResults[1] + grantResults[2] ==
-                    PackageManager.PERMISSION_GRANTED))                                                       // read write camera 퍼미션을 모두 허가 받는 경우 CopyFiles 함수 실행
+            if((grantResults.length > 0) && (grantResults[0] + grantResults[1] + grantResults[2] == PackageManager.PERMISSION_GRANTED))                                                       
             {
                 m_have_permission = true;
-            }else{
+            }
+            else
+            {
                 m_have_permission = false;
             }
 
