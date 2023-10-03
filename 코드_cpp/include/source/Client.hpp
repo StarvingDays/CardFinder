@@ -90,7 +90,7 @@ bool Client::ConnectToServer()
 }
 
 
-auto Client::Run() -> void
+auto Client::StayUntilComplete() -> void
 {
     m_io_context.restart();
 
