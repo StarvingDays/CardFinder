@@ -3,7 +3,7 @@
 
 코드_cpp : C++ 코드
 
-코드_java : androidstudio Activity 코드
+코드_java : 안드로이드 스튜디오 Activity 코드
 
 
 
