@@ -2,12 +2,13 @@
 
 #include <jni.h>
 #include <Utils.hpp>
-#include <Client.hpp>
+#include <queue>
+#include <vector>
 #include <thread>
 #include <mutex>
 #include <future>
 
-// Singleton Instance 
+// Singleton Instance
 // Java에 CardFinder 인스턴스를 저장 못 하기 때문에
 // 매 프레임마다 인스턴스 초기화를 방지하기 위해 싱글톤을 사용
 class CardFinder
@@ -15,7 +16,7 @@ class CardFinder
 public:
     using Lines = std::vector<cv::Vec4f>;
     using Rects = std::vector<cv::Rect>;
-    
+
     // 상단, 좌측, 하단, 우측 영상을 구분하는 enum class
     enum class AreaLocation
     {
@@ -28,21 +29,18 @@ public:
     // Singleton Instance 생성 함수
     static CardFinder& GetInstance(JNIEnv& env, jobject& obj, int& w, int& h);
     // 영상 분석 시작함수
-    auto Start(unsigned char* data, jint& col, jint& row) -> void;
+    auto InputImgData(unsigned char* data, jint& col, jint& row);
+    auto ImageProcessing(std::vector<uchar>& img_buffer) -> void;
     // 전체 관심영역 반환 함수
     // 체크카드를 포착하여 얻은 네 개의 교점을 반환하는 함수
     auto GetCoordinates() -> std::vector<float>;
+    auto GetImageBuffer() -> std::vector<uchar>&;
+    auto GetStopImageProcessing() -> bool;
     // 네 개의 교점 데이터가 저장된 객체를 초기화하는 함수
     auto ResetCoordinates() -> void;
-    // m_client에 저장된 base64 포멧 버퍼를 초기화하는 함수
-    auto ResetClientBuffer() -> void;
     auto ResetStopImageProcessing() -> void;
-    auto IsEmptyBuffer() -> bool;
 
-    // 분석결과 반환함수
-    auto GetResult() -> std::string;
-
-    auto PullTasks() -> void;
+    auto RemoveImageProcessingBufferInQueue() -> void;
     // 소멸자
     ~CardFinder();
 
@@ -93,29 +91,24 @@ private:
     cv::Mat m_A;
     // 최소자승 밝기 보정의 결과가 담기는 전체, 가로, 세로, 영역의 Mat 타입 이미지
     cv::Mat m_br_correction_field;
-    // 이진영상의 침식 및 확장 연산 사용되는 커널
-    cv::Mat m_kernel;
     // 히스토그램 평준화에 사용되는 CLAHE 객체
     std::shared_ptr<cv::CLAHE> m_clahe;
     // 가우시안 저주파 및 고주파 필터
     std::vector<cv::Mat> m_gaussian_filters;
     // 전체 관심영역으로 포착된 이미지
     std::vector<jfloat> m_res_coordinate;
-    // 클라이언트
-    Client m_client;
     // json 포멧의 response 패킷의 body 메세지가 저장되는 string 객체
-    std::string m_result;
+    std::vector<uchar> m_image_buffer;
     // 이미지 전처리 중단용 atomic<bool>
-    std::atomic_bool m_stop_image_processing;
+    bool m_stop_image_processing;
     // pulling 스레드 내부의 while 루프용 atomic<bool>
     std::atomic_bool m_pull_thr_on;
     // 이미지 전처리 작업 큐
-    std::queue<std::future<void>> m_image_processing_tasks;
+    std::queue<std::vector<uchar>> m_image_data_queue;
     // task queue pulling 스레드
     std::vector<std::thread> m_pull_thr;
     // 스레드 대기용 객체
     std::condition_variable m_conv;
     // 스레드 임계영역 처리용 mutex
-    std::mutex m_pulling_tasks_mutex;
+    std::mutex m_pulling_tasks_mutex, m_image_precessing_mutex, m_cross_pt_mutex;
 };
-
