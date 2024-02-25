@@ -2,8 +2,8 @@ package com.sjlee.cardfinder;
 
 import androidx.annotation.NonNull;
 import android.annotation.SuppressLint;
-
 import androidx.annotation.RequiresApi;
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
@@ -15,7 +15,6 @@ import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LifecycleOwner;
 
-import android.app.ProgressDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -23,7 +22,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.graphics.drawable.ColorDrawable;
+
 import android.media.Image;
 import android.os.Build;
 import android.os.Bundle;
@@ -33,7 +32,6 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageView;
-import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.nio.ByteBuffer;
@@ -42,52 +40,34 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-
 public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Analyzer {
 
     private ListenableFuture<ProcessCameraProvider> m_camera_provider_future;
-
-    private Point m_window_size;                                                                // 스마트폰 화면의 가로 세로 길이를 담는 객체
-
-    private ImageView m_roi_image_view, m_line_image_view;                                      // 체크카드가 놓일 관심영역
-
-    private ProcessCameraProvider m_camera_provider;                                            // 카메라 프로바이더 객체
-    
-    private PreviewView m_preview_view;                                                         // 미리보기뷰 객체
-    
-    private Preview m_preview;                                                                  // 미리보기 객체
-
-    private ImageAnalysis m_image_analizer;                                                     // 이미지 아날라이저 객체
-    
-    private ViewGroup.LayoutParams m_preview_layout;                                            // 뷰의 레이아웃을 변경하는 객체   
-
-    private RelativeLayout.LayoutParams m_roi_layout;                                           // 이미지 분석 객체 가로 세로 길이
-
+    private Point m_window_size;                                                                                         // 스마트폰 화면의 가로 세로 길이를 담는 객체
+    private ImageView m_roi_image_view, m_line_image_view;                                                               // 체크카드가 놓일 관심영역
+    private ProcessCameraProvider m_camera_provider;                                                                     // 카메라 프로바이더 객체
+    private PreviewView m_preview_view;                                                                                  // 미리보기뷰 객체
+    private Preview m_preview;                                                                                           // 미리보기 객체
+    private ImageAnalysis m_image_analizer;                                                                              // 이미지 아날라이저 객체
+    private ViewGroup.LayoutParams m_preview_layout;                                                                     // 뷰의 레이아웃을 변경하는 객체
+    private RelativeLayout.LayoutParams m_roi_layout;                                                                    // 이미지 분석 객체 가로 세로 길이
     private int m_imageAnalysis_width, m_imageAnalysis_height;
-    private int m_image_view_left, m_image_view_top, m_image_view_w, m_image_view_h;            // 미리보기의 관심영역 x축, y축, 가로길이, 세로길이
-
-    private Button m_button_back;                                                               // 메인화면으로 이동하는 버튼
-
-    private Canvas m_roi_canvas, m_line_canvas;                                                 // 미리보기 관심영역에 배경을 그리는 캔버스
-
-    private Bitmap m_roi_bitmap, m_line_bitmap;                                                 // 미리보기 관심영역에 배경을 그리는 비트맵
-
-    private Paint m_paint;                                                                      // 관심영역의 모서리 지점의 좌표를 저장하는 객체 
-
-    private boolean m_executor_on;                                                              // Java 스레드풀 생성 여부와 관련한 boolean 값
-
-    private ExecutorService m_pool;                                                             // Java 스레드풀 객체
-
-
-    private native void ImagePreProcessing(byte[] array, int width, int height);                // ImageAnalysis에서 획득한 영상을 분석하는 JNI nateve 함수
-
-    private native float[] GetCoordinates(int width, int height);                               // 교점을 초기화하는 JNI native 함수
-    private native boolean IsEmptyClientBuffer(int width, int height);                          // 클라이언트 내부 버퍼가 비어있는 여부를 확인하는 JNI native 함수
-    private native String GetResult();
+    private int m_image_view_left, m_image_view_top, m_image_view_w, m_image_view_h;                                     // 미리보기의 관심영역 x축, y축, 가로길이, 세로길이
+    private Button m_button_back;                                                                                        // 메인화면으로 이동하는 버튼
+    private Canvas m_roi_canvas, m_line_canvas;                                                                          // 미리보기 관심영역에 배경을 그리는 캔버스
+    private Bitmap m_roi_bitmap, m_line_bitmap;                                                                          // 미리보기 관심영역에 배경을 그리는 비트맵
+    private Paint m_paint;                                                                                               // 관심영역의 모서리 지점의 좌표를 저장하는 객체
+    private boolean m_executor_on;                                                                                       // Java 스레드풀 생성 여부와 관련한 boolean 값
+    private boolean m_close_btn_on, m_is_detected;
+    private ExecutorService m_pool;                                                                                      // Java 스레드풀 객체
+    private native void ImageProcessing(byte[] array, int width, int height);                                            // ImageAnalysis에서 획득한 영상을 분석하는 JNI nateve 함수
+    private native float[] GetCoordinates(int width, int height);                                                        // 교점을 초기화하는 JNI native 함수
+    private native byte[] GetImageBuffer(int width, int height);
+    private native boolean StopImageProcessing(int width, int height);
     private native void SetDefaultValue(int width, int height);
-    private native void PullTasks(int width, int height);                                       // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
+    private native void RemoveImageProcessingBufferInQueue(int width, int height);                                       // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
 
-    Executor getExecutor() {                                                                    // 특정 테스크를 비동기적으로 실행시키기 위한
+    Executor getExecutor() {                                                                                             // 특정 테스크를 비동기적으로 실행시키기 위한
         return ContextCompat.getMainExecutor(this);
     }
 
@@ -115,6 +95,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
         m_button_back.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                m_close_btn_on = true;
                 m_executor_on = false;
                 Intent intent = new Intent(getApplicationContext(), MainActivity.class);
                 intent.putExtra("Cancel", "");
@@ -125,7 +106,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
 
         m_camera_provider_future = ProcessCameraProvider.getInstance(this);
 
-        m_camera_provider_future.addListener(() -> {                                                                    // https://developer.android.com/training/camerax/architecture?hl=ko#java
+        m_camera_provider_future.addListener(() -> {                                                                      // https://developer.android.com/training/camerax/architecture?hl=ko#java
 
             try {
                 m_camera_provider = m_camera_provider_future.get();
@@ -196,7 +177,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
 
 
 
-    private void SetResolution()                                                                                         //  16:9와 4:3 화면비율에 맞춰 PreviewView와 ImageAnalysis의 가로 세로 길이를 변경하는 함수
+    private void SetResolution()                                                                                          //  16:9와 4:3 화면비율에 맞춰 PreviewView와 ImageAnalysis의 가로 세로 길이를 변경하는 함수
     {
         m_window_size = new Point();
 
@@ -252,17 +233,17 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
 
         if(m_executor_on)
         {
-            PullTasks(m_imageAnalysis_height, m_imageAnalysis_width);                                                    // ViewActivity 호출 시 CardFinder Task를 모두 비운다
+            RemoveImageProcessingBufferInQueue(m_imageAnalysis_height, m_imageAnalysis_width);                           // ViewActivity 호출 시 CardFinder Task를 모두 비운다
             SetDefaultValue(m_imageAnalysis_height, m_imageAnalysis_width);                                              // CardFinder 인스턴스의 초기값 설정
 
-            m_pool.execute(new Runnable() {
+            m_pool.submit(new Runnable() {
                 @Override
                 public void run() {
                     while (m_executor_on)
                     {
                         try
                         {
-                            Thread.sleep(100);
+                            Thread.sleep(10);
 
                             float[] coord = GetCoordinates(0, 0);
 
@@ -272,8 +253,14 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
                                         coord[0], coord[1], coord[2], coord[3],
                                         coord[4], coord[5], coord[6], coord[7]);
 
-                                if(!IsEmptyClientBuffer(m_imageAnalysis_height, m_imageAnalysis_width))                  // 클라이언트 내부 버퍼가 비어있는 여부 확인
+                                if(StopImageProcessing(m_imageAnalysis_height, m_imageAnalysis_width))                   // 클라이언트 내부 버퍼가 비어있는 여부 확인
+                                {
+                                    m_is_detected = true;
                                     m_executor_on = false;
+                                }
+
+
+
                             }
 
                         } catch (InterruptedException e) {
@@ -281,20 +268,28 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
                         }
                     }
 
-                    runOnUiThread(new Runnable() {                                                                        // UI 스레드에서 미리보기 뷰 프리징 실행
-                        @Override
-                        public void run() {
-                            m_camera_provider.unbind(m_preview);
-                        }
-                    });
+                    if(m_is_detected)
+                    {
+                        runOnUiThread(new Runnable() {                                                                   // UI 스레드에서 미리보기 뷰 프리징 실행
+                            @Override
+                            public void run() {
+                                m_camera_provider.unbind(m_preview);
+                            }
+                        });
 
-                    String result = GetResult();                                                                          // 이미지 분석결과를 json 포멧 스트링으로 획득
+                        byte[] result_img = GetImageBuffer(0, 0);
 
-                    Intent intent = new Intent(getApplicationContext(), MainActivity.class);                              // MainActivity intend 생성
-                    intent.putExtra("Result", result);                                                                    // MainActivity intend에 result 값을 삽입
-                    setResult(RESULT_OK, intent);                                                                         // MainActivity로 정보를 전달
+                        Intent intent = new Intent(getApplicationContext(), MainActivity.class);                         // MainActivity intend 생성
 
-                    finish();                                                                                             // VeiwActivity 종료
+                        intent.putExtra("Result", result_img);
+
+                        setResult(RESULT_OK, intent);                                                                    // MainActivity로 정보를 전달
+                    }
+
+
+                    if(!m_close_btn_on)
+                        finish();
+
                 }
             });
 
@@ -310,6 +305,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     @Override
     public void onBackPressed()                                                                                          // 스마트폰의 뒤로가기 버튼을 누를 시 동작하는 함수
     {
+        m_close_btn_on = true;
         m_executor_on = false;
         Intent intent = new Intent(getApplicationContext(), MainActivity.class);
         intent.putExtra("Cancel", "");
@@ -321,9 +317,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     @Override
     public void analyze(@NonNull ImageProxy image)                                                                       // 머신러닝 등의 분석을 위해 CPU에서 액세스할 수 있는 버퍼를 획득하는 함수
     {
-        if(m_executor_on)
-            ImagePreProcessing(ImageToGrayscaleByte(image.getImage()), m_imageAnalysis_width, m_imageAnalysis_height);
-
+        ImageProcessing(ImageToGrayscaleByte(image.getImage()), m_imageAnalysis_width, m_imageAnalysis_height);
         image.close();
     }
 
@@ -367,8 +361,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
         });
     }
 
-    
+
     public int[] GetImageViewSize(){ return new int[]{m_image_view_w, m_image_view_h};}                                  // ImageView의 가로 세로 길이를 반환하는 함수
 }
-
 
