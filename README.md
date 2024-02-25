@@ -5,5 +5,5 @@
 
 코드_java : androidstudio Activity 코드
 
-코드_python : fastAPI를 사용하는 웹서버 영상인식 코드
+
 
