@@ -1,25 +1,35 @@
 package com.sjlee.cardfinder;
 
 import androidx.appcompat.app.AppCompatActivity;
+
 import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.widget.TextView;
+
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
+
+
 import android.Manifest;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
+
 import android.annotation.TargetApi;
 import android.content.pm.PackageManager;
 import android.os.Build;
+
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+
 import com.googlecode.tesseract.android.TessBaseAPI;
+
 import android.graphics.BitmapFactory;
-import android.Manifest.permission.CAMERA;
+
+import static android.Manifest.permission.CAMERA;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
