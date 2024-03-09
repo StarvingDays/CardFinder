@@ -10,27 +10,32 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
         m_parts_of_captured_area(SetPartsOfCapturedArea()),                                                          // 부분영역(가로, 세로)
         m_A(SetBrightCorrectionModel()),                                                                             // 최소자승 A행렬들(전체영역, 가로영역, 세로영역)
         m_br_correction_field(SetBrightCorrectionField()),                                                           // 최소자승 보정으로 인한 결과 영상을 저장하는 영상(전체영역, 가로영역, 세로영역)
-        m_kernel(cv::getStructuringElement(cv::MORPH_CROSS, cv::Size(3, 3))),                                        // 침식 및 확장 연산시 사용되는 커널
-        m_clahe(SetCLAHE(4.0, cv::Size(8, 8))),                                                                      // 명암 보정에 쓰이는 CLAHE 객체
+        m_clahe(SetCLAHE(4.0, cv::Size(8, 8))),                                                                      // 침식 및 확장 연산시 사용되는 커널
         m_gaussian_filters(SetGaussianFilters(m_captured_area.size(), 30)),                                          // 가우시안 low, high 필터
+        m_stop_image_processing(false),
         m_pull_thr_on(true),
-        m_pull_thr(2),
-        m_client("0.0.0.0", "0000", "/OCR", 11)
+        m_pull_thr(2)
 {
     for(int i = 0; i < m_pull_thr.size(); ++i)
     {
         m_pull_thr[i] = std::thread([this](){                                                                        // 버퍼에서 저장된 future 타입객체를 꺼내는 스레드를 생성하여 실행한다
 
-            while(m_pull_thr_on.load(std::memory_order_release))                                                     // m_pull_thr_on 값이 참일 때 while 루프 실행
+            while(m_pull_thr_on.load(std::memory_order_acquire))                                                     // m_pull_thr_on 값이 참일 때 while 루프 실행
             {
-                std::future<void> job;
+                std::vector<uchar> buf;
+
                 {
                     std::unique_lock<std::mutex> lcok(m_pulling_tasks_mutex);                                        // 임계 영역 설정
-                    m_conv.wait(lcok, [this]{ return !m_image_processing_tasks.empty(); });                          // m_processing_tasks 버퍼가 비어있는 경우 모든 스레드를 대기시킨다
-                    job = std::move(m_image_processing_tasks.front());                                               // 대기상태에서 꺠어난 스레드가 로컬 future 변수(job)에 버퍼에 있는 future 객체의 소유권을 이전한다
-                    m_image_processing_tasks.pop();                                                                  // queue 맨 앞쪽 객체 제거
+
+                    m_conv.wait(lcok, [this]{ return !m_image_data_queue.empty(); });                                // m_processing_tasks 버퍼가 비어있는 경우 모든 스레드를 대기시킨다
+
+                    buf = std::move(m_image_data_queue.front());                                                     // queue 맨 앞쪽 추출
+
+                    m_image_data_queue.pop();                                                                        // queue 맨 앞쪽 객체 제거
+                                                                                                                     // lock 해체
                 }
-                job.get();                                                                                           // 로컬 future 객체 실행
+
+                this->ImageProcessing(buf);                                                                          // 이미지 프로세싱 실행
             }
         });
     }
@@ -38,9 +43,9 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
 
 CardFinder::~CardFinder()
 {
-    m_conv.notify_all();                                                                                             // 소멸자 호출 시 모든 스레드들을 꺠운다
-
     m_pull_thr_on.store(false, std::memory_order_release);                                                           // while 루프 탈출
+    
+    m_conv.notify_all();                                                                                             // 소멸자 호출 시 모든 스레드들을 꺠운다
 
     for(int i = 0; i < m_pull_thr.size(); ++i) m_pull_thr[i].join();                                                 // thread join
 }
@@ -124,10 +129,10 @@ auto CardFinder::SetPartsOfCapturedArea() -> Rects
     m_start_pt_of_bottom_area = cross_pt3;
 
     return Rects() = {
-            cv::Rect(cv::Point(cross_pt1.x, 0), cross_pt2),                                                          // 상단 관심영역
+            cv::Rect(cv::Point(cross_pt1.x, 0), cv::Point(cross_pt2.x - 1, cross_pt2.y)),                            // 상단 관심영역
             cv::Rect(pt1, cross_pt3),                                                                                // 좌측 관심영역
             cv::Rect(cross_pt3, cv::Point(cross_pt4.x, pt8.y)),                                                      // 하단 관심영역
-            cv::Rect(cross_pt2, pt6)                                                                                 // 우측 관심영역
+            cv::Rect(cv::Point(cross_pt2.x + 1, cross_pt2.y), pt6)                                                   // 우측 관심영역
     };
 
 }
@@ -163,7 +168,7 @@ auto CardFinder::SetBrightCorrectionModel() -> cv::Mat
     return A;
 }
 
-auto CardFinder::SetBrightCorrectionFields() -> cv::Mat
+auto CardFinder::SetBrightCorrectionField() -> cv::Mat
 {
     CV_Assert(m_captured_area.height != 0 && m_captured_area.width != 0);
 
@@ -203,19 +208,6 @@ auto CardFinder::SetGaussianFilters(cv::Size size, double D0) -> std::vector<cv:
     return filter;
 }
 
-auto CardFinder::SetCoordinates(cv::Point2f& pt1, cv::Point2f& pt2, cv::Point2f& pt3, cv::Point2f& pt4) -> void
-{
-    std::mutex m;
-    std::lock_guard<std::mutex> lock(m);
-    {
-    m_res_coordinate = {                                                                                             // 관심영역에 위치한 체크카드의 교점 네 곳이 ImageView에서의 위치비율과
-                pt1.x * m_scale_factor.x, pt1.y * m_scale_factor.y,                                                  // 호환되도록 교점의 x,y축에 스케일 팩터를 곱한다
-                pt2.x * m_scale_factor.x, pt2.y * m_scale_factor.y,
-                pt3.x * m_scale_factor.x, pt3.y * m_scale_factor.y,
-                pt4.x * m_scale_factor.x, pt4.y * m_scale_factor.y,
-        };
-    }
-}
 
 auto CardFinder::SetCLAHE(double limit_var, cv::Size tile_size) -> cv::Ptr<cv::CLAHE>
 {
@@ -289,6 +281,7 @@ auto CardFinder::FindLines(cv::Mat& src, AreaLocation arealoc) -> Lines {
 }
 
 
+
 auto CardFinder::FindCorner(Lines& lines1, Lines& lines2) -> cv::Point2f
 {
     cv::Point2f res_pt;
@@ -329,25 +322,6 @@ auto CardFinder::FindCorner(Lines& lines1, Lines& lines2) -> cv::Point2f
     return res_pt;
 }
 
-auto CardFinder::GetCoordinates() -> std::vector<float>
-{
-    std::vector<float> res;
-    std::mutex m;
-    std::lock_guard<std::mutex> lock(m);
-    {
-        res = std::move(m_res_coordinate);
-    }
-
-    return res;                                                                                                      // 스케일 팩터로 보정된 교점들을 반환
-}
-
-auto CardFinder::GetResult() -> std::string
-{
-    if(m_client.Connect())
-        m_client.StartAnalysis();
-
-    return m_client.GetMessage();
-};
 
 auto CardFinder::BrightCorrect(cv::Mat& src) -> cv::Mat&
 {
@@ -359,7 +333,7 @@ auto CardFinder::BrightCorrect(cv::Mat& src) -> cv::Mat&
     Y = Y.reshape(1, total);                                                                                         // 1행 total열 행렬으로 변환
 
     X = (m_A.t() * m_A).inv() * m_A.t() * Y;                                                                         // X행렬 생성
-                                                                                                                     // a ~ j : x 값 획득
+    // a ~ j : x 값 획득
     float& a = *X.ptr<float>(0);
     float& b = *X.ptr<float>(1);
     float& c = *X.ptr<float>(2);
@@ -420,253 +394,249 @@ auto CardFinder::HomomorphicCorrect(cv::Mat& src, cv::Mat& filter) -> cv::Mat
     return complex;
 }
 
-auto CardFinder::Start(unsigned char* data, jint& col, jint& row) -> void
+auto CardFinder::InputImgData(unsigned char* data, jint& col, jint& row)
 {
-    if(m_stop_image_processing.load(std::memory_order_release) == false)                                                   // m_atom_bool값이 true일 경우 영상 전처리 실행
     {
-        std::mutex m;
+        std::lock_guard<std::mutex> lock(m_pulling_tasks_mutex);
+
+        m_image_data_queue.push(std::vector<uchar>(data, data + (col * row)));
+
+        m_conv.notify_one();
+    }
+}
+
+auto CardFinder::ImageProcessing(std::vector<uchar>& img_buffer) -> void
+{
+
+    try
+    {
+        int captured_width = m_captured_area.width;
+        int captured_height = m_captured_area.height;
+
+        cv::Mat img = cv::Mat(
+                m_image_proxy_size.height, m_image_proxy_size.width,
+                CV_8UC1, img_buffer.data(), m_image_proxy_size.width)(m_captured_area);
+
+        cv::Mat canny;
+        cv::Canny(img(m_parts_of_captured_area[0]), canny, 100, 500);                                           // Canny 알고리즘 적용
+        auto line_col1 = this->FindLines(canny, AreaLocation::TOP);                                             // 직선검출(상단)
+
+
+        cv::Canny(img(m_parts_of_captured_area[1]), canny, 100, 500);
+        auto line_row1 = this->FindLines(canny, AreaLocation::LEFT);                                            // 직선검출(좌측)
+
+
+        cv::Canny(img(m_parts_of_captured_area[2]), canny, 100, 500);
+        auto line_col2 = this->FindLines(canny, AreaLocation::BOTTOM);                                          // 직선검출(하단)
+
+
+        cv::Canny(img(m_parts_of_captured_area[3]), canny, 100, 500);
+        auto line_row2 = this->FindLines(canny, AreaLocation::RIGHT);                                           // 직선검출(우측)
+
+        if (!line_col1.empty() && !line_row1.empty() && !line_col2.empty() && !line_row2.empty())
         {
-            std::lock_guard<std::mutex>lock1(m);
+            cv::Point2f zero(0.0f, 0.0f);
 
-            m_image_processing_tasks.push(std::async(std::launch::async, [this](std::vector<unsigned char>&& img_buffur)   // 이미지 전처리 및 기타 연산들을 std::async를 사용하여 비동기로 실행한다
-            {
-                try
+            cv::Point2f pt1 = this->FindCorner(line_col1, line_row1);                                           // 상단과 좌측영역에서 발견된 직선이 이루는 교점 획득
+            cv::Point2f pt2 = this->FindCorner(line_col1, line_row2);                                           // 상단과 하단영역에서 발견된 직선이 이루는 교점 획득
+            cv::Point2f pt3 = this->FindCorner(line_col2, line_row1);                                           // 하단과 좌측영역에서 발견된 직선이 이루는 교점 획득
+            cv::Point2f pt4 = this->FindCorner(line_col2, line_row2);                                           // 하단과 우측영역에서 발견된 직선이 이루는 교점 획득
+
+            if (pt1 != zero && pt2 != zero && pt3 != zero && pt4 != zero)
+            {                                                                                                   // 전체 관심영역에 교점이 포함되는 여부 확인
+                bool is_inner_pt1 =
+                        (pt1.x < img.cols && pt1.y < img.rows) &&
+                        (pt1.x > 0 && pt1.y > 0);
+
+                bool is_inner_pt2 =
+                        (pt2.x < img.cols && pt1.y < img.rows) &&
+                        (pt2.x > 0 && pt1.y > 0);
+
+                bool is_inner_pt3 =
+                        (pt3.x < img.cols && pt1.y < img.rows) &&
+                        (pt3.x > 0 && pt1.y > 0);
+
+                bool is_inner_pt4 =
+                        (pt4.x < img.cols && pt1.y < img.rows) &&
+                        (pt4.x > 0 && pt1.y > 0);
+
+                if ((is_inner_pt1 && is_inner_pt2 && is_inner_pt3 && is_inner_pt4) == true)                      // 교점이 모든 네 곳의 영역 내부에 위치하는 경우
                 {
-                    int captured_width = m_captured_area.width;
-                    int captured_height = m_captured_area.height;
 
-                    cv::Mat img = cv::Mat(
-                            m_image_proxy_size.height, m_image_proxy_size.width,
-                            CV_8UC1, img_buffur.data(), m_image_proxy_size.width)(m_captured_area);
-
-
-                    cv::Mat canny;
-                    cv::Canny(img(m_parts_of_captured_area[0]), canny, 100, 500);                                           // Canny 알고리즘 적용
-                    auto line_col1 = this->FindLines(canny, AreaLocation::TOP);                                             // 직선검출(상단)
+                    cv::Point2f rot_pt1 = cv::Point2f(captured_height - 1 - pt1.y, pt1.x);                       // pt1을 시계방향으로 90도 회전
+                    cv::Point2f rot_pt2 = cv::Point2f(captured_height - 1 - pt2.y, pt2.x);                       // pt2을 시계방향으로 90도 회전
+                    cv::Point2f rot_pt3 = cv::Point2f(captured_height - 1 - pt3.y, pt3.x);                       // pt3을 시계방향으로 90도 회전
+                    cv::Point2f rot_pt4 = cv::Point2f(captured_height - 1 - pt4.y, pt4.x);                       // pt4을 시계방향으로 90도 회전
 
 
-                    cv::Canny(img(m_parts_of_captured_area[1]), canny, 100, 500);
-                    auto line_row1 = this->FindLines(canny, AreaLocation::LEFT);                                            // 직선검출(좌측)
 
+                    cv::Point2f tan_pos_pt;                                                                      // tan 지점 교점
 
-                    cv::Canny(img(m_parts_of_captured_area[2]), canny, 100, 500);
-                    auto line_col2 = this->FindLines(canny, AreaLocation::BOTTOM);                                          // 직선검출(하단)
+                    float ang1 = 0.0f, ang2 = 0.0f, ang3 = 0.0f, ang4 = 0.0f;
 
-
-                    cv::Canny(img(m_parts_of_captured_area[3]), canny, 100, 500);
-                    auto line_row2 = this->FindLines(canny, AreaLocation::RIGHT);                                           // 직선검출(우측)
-
-                    if (!line_col1.empty() && !line_row1.empty() && !line_col2.empty() && !line_row2.empty())
+                    if (pt1.y > pt2.y)                                                                           // 상단영역이 반시계방향으로 기운 경우
                     {
-                        cv::Point2f zero(0.0f, 0.0f);
+                        tan_pos_pt = cv::Point2f(pt1.x, pt2.y);
+                        ang1 = FindAngle(tan_pos_pt - pt2, pt1 - pt2);
+                    }
+                    if (pt1.y < pt2.y)                                                                           // 상단영역이 시계방향으로 기운 경우
+                    {
+                        tan_pos_pt = cv::Point2f(pt2.x, pt1.y);
+                        ang1 = FindAngle(tan_pos_pt - pt1, pt2 - pt1);
+                    }
+                    if (pt3.y > pt4.y)                                                                           // 하단영역이 반시계방향으로 기운 경우
+                    {
+                        tan_pos_pt = cv::Point2f(pt4.x, pt3.y);
+                        ang2 = FindAngle(tan_pos_pt - pt3, pt4 - pt3);
+                    }
+                    if (pt3.y < pt4.y)                                                                           // 하단영역이 시계방향으로 기운 경우
+                    {
+                        tan_pos_pt = cv::Point2f(pt3.x, pt4.y);
+                        ang2 = FindAngle(tan_pos_pt - pt4, pt3 - pt4);
+                    }
+                    if (pt1.x < pt3.x)                                                                           // 좌측영역이 반시계방향으로 기운 경우
+                    {
+                        tan_pos_pt = cv::Point2f(pt1.x, pt3.y);
+                        ang3 = FindAngle(tan_pos_pt - pt1, pt3 - pt1);
+                    }
+                    if (pt1.x > pt3.x)                                                                           // 좌측영역이 시계방향으로 기운 경우
+                    {
+                        tan_pos_pt = cv::Point2f(pt3.x, pt1.y);
+                        ang3 = FindAngle(tan_pos_pt - pt3, pt1 - pt3);
+                    }
+                    if (pt2.x < pt4.x)                                                                           // 우측영역이 반시계방향으로 기운 경우
+                    {
+                        tan_pos_pt = cv::Point2f(pt4.x, pt2.y);
+                        ang4 = FindAngle(tan_pos_pt - pt4, pt2 - pt4);
+                    }
+                    if (pt2.x > pt4.x)                                                                           // 우측영역이 시계방향으로 기운 경우
+                    {
+                        tan_pos_pt = cv::Point2f(pt2.x, pt4.y);
+                        ang4 = FindAngle(tan_pos_pt - pt2, pt4 - pt2);
+                    }
 
-                        cv::Point2f pt1 = this->FindCorner(line_col1, line_row1);                                           // 상단과 좌측영역에서 발견된 직선이 이루는 교점 획득
-                        cv::Point2f pt2 = this->FindCorner(line_col1, line_row2);                                           // 상단과 하단영역에서 발견된 직선이 이루는 교점 획득
-                        cv::Point2f pt3 = this->FindCorner(line_col2, line_row1);                                           // 하단과 좌측영역에서 발견된 직선이 이루는 교점 획득
-                        cv::Point2f pt4 = this->FindCorner(line_col2, line_row2);                                           // 하단과 우측영역에서 발견된 직선이 이루는 교점 획득
 
-                        if (pt1 != zero && pt2 != zero && pt3 != zero && pt4 != zero)
-                        {                                                                                                   // 전체 관심영역에 교점이 포함되는 여부 확인
-                            bool is_inner_pt1 =
-                                    (pt1.x < img.cols && pt1.y < img.rows) &&
-                                    (pt1.x > 0 && pt1.y > 0);
+                    if ((ang1 != 0.0f) && (ang2 != 0.0f) && (ang3 != 0.0f) && (ang4 != 0.0f))                    // 기울기 각도 네 개를 모두 획득한 경우
+                    {
+                        m_clahe->apply(img, img);                                                                // CLAHE Equalization 적용
 
-                            bool is_inner_pt2 =
-                                    (pt2.x < img.cols && pt1.y < img.rows) &&
-                                    (pt2.x > 0 && pt1.y > 0);
+                        img = this->BrightCorrect(img);                                                          // 최소자승 밝기보정 적용
 
-                            bool is_inner_pt3 =
-                                    (pt3.x < img.cols && pt1.y < img.rows) &&
-                                    (pt3.x > 0 && pt1.y > 0);
+                        img =                                                                                    // HomomorphicFiltering : low pass + high pass 연산
+                                (0.3f * this->HomomorphicCorrect(img, m_gaussian_filters[0])) +
+                                (1.5f * this->HomomorphicCorrect(img, m_gaussian_filters[1]));
 
-                            bool is_inner_pt4 =
-                                    (pt4.x < img.cols && pt1.y < img.rows) &&
-                                    (pt4.x > 0 && pt1.y > 0);
+                        cv::Point center(captured_width / 2, captured_height / 2);                               // 관심영역의 중심점을 획득
 
-                            if ((is_inner_pt1 && is_inner_pt2 && is_inner_pt3 && is_inner_pt4) == true)                      // 교점이 모든 네 곳의 영역 내부에 위치하는 경우
+                        cv::Mat rot = cv::getRotationMatrix2D(center, (ang1 + ang2 + ang3 + ang4) / 4, 1);       // angle 만큼 회전하는 회전 영상획득
+
+                        cv::warpAffine(img, img, rot, cv::Size(captured_width, captured_height));                // 회전 연산 실행
+
+
+                        img = Rotate90<uchar, CV_8UC1>(img);                                                     // 90도 회전 실행
+
+                        {
+                            std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
+
+                            if(!m_stop_image_processing)
                             {
-                                cv::Point2f tan_pos_pt;                                                                      // tan 지점 교점
+                                m_stop_image_processing = true;
 
-                                float ang1 = 0.0f, ang2 = 0.0f, ang3 = 0.0f, ang4 = 0.0f;
-
-                                if (pt1.y > pt2.y)                                                                           // 상단영역이 반시계방향으로 기운 경우
-                                {
-                                    tan_pos_pt = cv::Point2f(pt1.x, pt2.y);
-                                    ang1 = FindAngle(tan_pos_pt - pt2, pt1 - pt2);
-                                }
-                                if (pt1.y < pt2.y)                                                                           // 상단영역이 시계방향으로 기운 경우
-                                {
-                                    tan_pos_pt = cv::Point2f(pt2.x, pt1.y);
-                                    ang1 = FindAngle(tan_pos_pt - pt1, pt2 - pt1);
-                                }
-                                if (pt3.y > pt4.y)                                                                           // 하단영역이 반시계방향으로 기운 경우
-                                {
-                                    tan_pos_pt = cv::Point2f(pt4.x, pt3.y);
-                                    ang2 = FindAngle(tan_pos_pt - pt3, pt4 - pt3);
-                                }
-                                if (pt3.y < pt4.y)                                                                           // 하단영역이 시계방향으로 기운 경우
-                                {
-                                    tan_pos_pt = cv::Point2f(pt3.x, pt4.y);
-                                    ang2 = FindAngle(tan_pos_pt - pt4, pt3 - pt4);
-                                }
-                                if (pt1.x < pt3.x)                                                                           // 좌측영역이 반시계방향으로 기운 경우
-                                {
-                                    tan_pos_pt = cv::Point2f(pt1.x, pt3.y);
-                                    ang3 = FindAngle(tan_pos_pt - pt1, pt3 - pt1);
-                                }
-                                if (pt1.x > pt3.x)                                                                           // 좌측영역이 시계방향으로 기운 경우
-                                {
-                                    tan_pos_pt = cv::Point2f(pt3.x, pt1.y);
-                                    ang3 = FindAngle(tan_pos_pt - pt3, pt1 - pt3);
-                                }
-                                if (pt2.x < pt4.x)                                                                           // 우측영역이 반시계방향으로 기운 경우
-                                {
-                                    tan_pos_pt = cv::Point2f(pt4.x, pt2.y);
-                                    ang4 = FindAngle(tan_pos_pt - pt4, pt2 - pt4);
-                                }
-                                if (pt2.x > pt4.x)                                                                           // 우측영역이 시계방향으로 기운 경우
-                                {
-                                    tan_pos_pt = cv::Point2f(pt2.x, pt4.y);
-                                    ang4 = FindAngle(tan_pos_pt - pt2, pt4 - pt2);
-                                }
+                                m_res_coordinate = {                                                            // 관심영역에 위치한 체크카드의 교점 네 곳이 ImageView에서의 위치비율과
+                                        rot_pt3.x * m_scale_factor.x, rot_pt3.y * m_scale_factor.y,             // 호환되도록 교점의 x,y축에 스케일 팩터를 곱한다
+                                        rot_pt1.x * m_scale_factor.x, rot_pt1.y * m_scale_factor.y,
+                                        rot_pt4.x * m_scale_factor.x, rot_pt4.y * m_scale_factor.y,
+                                        rot_pt2.x * m_scale_factor.x, rot_pt2.y * m_scale_factor.y
+                                };
 
 
-                                if ((ang1 != 0.0f) && (ang2 != 0.0f) && (ang3 != 0.0f) && (ang4 != 0.0f))                    // 기울기 각도 네 개를 모두 획득한 경우
-                                {
-
-                                    m_clahe->apply(img, img);                                                                // CLAHE Equalization 적용
-
-                                    img = this->BrightCorrect(img);                                                          // 최소자승 밝기보정 적용
-
-                                    img =                                                                                    // HomomorphicFiltering : low pass + high pass 연산
-                                            (0.3f * this->HomomorphicCorrect(img, m_gaussian_filters[0])) +
-                                            (1.5f * this->HomomorphicCorrect(img, m_gaussian_filters[1]));
-
-                                    cv::Point center(captured_width / 2, captured_height / 2);                               // 관심영역의 중심점을 획득
-
-                                    cv::Mat rot = cv::getRotationMatrix2D(center, (ang1 + ang2 + ang3 + ang4) / 4, 1);       // angle 만큼 회전하는 회전 영상획득
-
-                                    cv::warpAffine(img, img, rot, cv::Size(captured_width, captured_height));                // 회전 연산 실행
-
-
-                                    img = Rotate90<uchar, CV_8UC1>(img);                                                     // 90도 회전 실행
-
-                                    std::mutex m;
-                                    {
-                                        std::lock_guard<std::mutex> lock(m);                                                 // 한 개의 스레드만 접근 하도록 lock 실행
-
-                                        if(m_stop_image_processing.load(std::memory_order_release) == false)
-                                        {
-                                            pt1 = cv::Point2f(captured_height - 1 - pt1.y, pt1.x);                           // pt1을 시계방향으로 90도 회전
-                                            pt2 = cv::Point2f(captured_height - 1 - pt2.y, pt2.x);                           // pt2을 시계방향으로 90도 회전
-                                            pt3 = cv::Point2f(captured_height - 1 - pt3.y, pt3.x);                           // pt3을 시계방향으로 90도 회전
-                                            pt4 = cv::Point2f(captured_height - 1 - pt4.y, pt4.x);                           // pt4을 시계방향으로 90도 회전
-
-                                            this->SetCoordinates(pt3, pt1, pt4, pt2);                                        // 교점에 스케일 팩터를 곱한다
-
-                                            m_client.SetData(img);                                                           // 이미지 데이터를 client 인스턴스에 base64 포멧으로 변환하여 저장
-
-                                            m_stop_image_processing.store(true, std::memory_order_release);                  // m_atom_bool을 false로 저장하여 추가로 영상 데이터가 저장되는 것을 막는다
-                                        }
-                                    }
-                                }
+                                cv::imencode(".png", img, m_image_buffer);
                             }
                         }
                     }
                 }
-                catch (std::exception &ex) {
-
-                }
-
-            }, std::vector<unsigned char>(data, data + (col * row))));
-
-            m_conv.notify_one();
+            }
         }
     }
-}
-
-auto CardFinder::PullTasks() -> void
-{
-    m_stop_image_processing.store(true, std::memory_order_release);
-
-    std::mutex m;
-    std::lock_guard<std::mutex> lock(m);
+    catch (std::exception &ex)
     {
-        while(!m_image_processing_tasks.empty())                                                                             // task queue가 비어있을 때 까지 while 루프 실행
-        {
 
-        }
     }
-
-
 }
 
+auto CardFinder::RemoveImageProcessingBufferInQueue() -> void
+{
+    {
+        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
+        std::queue<std::vector<uchar>> temp;
+        std::swap(m_image_data_queue, temp);
+    }
+}
+
+auto CardFinder::GetStopImageProcessing() -> bool
+{
+    bool is_stop;
+    {
+        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
+        is_stop = m_stop_image_processing;
+    }
+    return is_stop;
+}
+
+auto CardFinder::GetCoordinates() -> std::vector<float>
+{
+    std::vector<float> res;
+    {
+        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
+        res = std::move(m_res_coordinate);
+    }
+
+    return res;
+}
+
+auto CardFinder::GetImageBuffer() ->std::vector<uchar>&
+{
+    return m_image_buffer;
+}
 
 auto CardFinder::ResetCoordinates() -> void
 {
-    std::mutex m;
     {
-        std::lock_guard<std::mutex> lock(m);
+        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
         m_res_coordinate.clear();                                                                                            // 저장된 교점 데이터 초기화
-    }
-}
-
-
-auto CardFinder::ResetClientBuffer() -> void
-{
-    std::mutex m;
-    {
-        std::lock_guard<std::mutex> lock(m);
-        m_client.ResetBuffer();                                                                                              // 클라이언트에 저장된 버퍼 초기화
     }
 }
 
 auto CardFinder::ResetStopImageProcessing() -> void
 {
-    m_stop_image_processing.store(false);                                                                                    // 이미지 전처리용 atomic<bool> 객체 초기화
-}
-
-auto CardFinder::IsEmptyBuffer() -> bool
-{
-    bool is_empty;
-    std::mutex m;
     {
-        std::lock_guard<std::mutex> lock(m);
-        is_empty = m_client.IsBufferEmpty();                                                                                 // 클라이언트에 버퍼가 비어있는 여부 확인
+        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
+        m_stop_image_processing = false;
+        m_image_buffer.clear();
     }
-    return is_empty;
+
+
+
 }
 
-extern "C"
-JNIEXPORT jstring JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_GetResult(JNIEnv *env, jobject thiz)
-{
-    int w = 0, h = 0;
-
-    CardFinder& instance = CardFinder::GetInstance(*env, thiz, w, h);
-
-    return env->NewStringUTF(instance.GetResult().c_str());
-}
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_ImageProcessing(
-        JNIEnv *env, jobject thiz, jbyteArray array, jint width, jint height)
+Java_com_sjlee_cardfinder_ViewActivity_ImageProcessing(JNIEnv *env, jobject thiz, jbyteArray array, jint width, jint height)
 {
 
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);                                               // 싱글턴 CardFinder 객체 생성
 
     jbyte* yData = env->GetByteArrayElements(array, nullptr);                                                                // yData는 GetByteArrayElements함수로 받아온 jbyte 타입 객체를 가리킨다
 
-    instance.Start(reinterpret_cast<unsigned char*>(yData), width, height);                                                  // 이미지 전처리 시작
+    instance.InputImgData(reinterpret_cast<unsigned char*>(yData), width, height);
 
     env->ReleaseByteArrayElements(array, yData, JNI_ABORT);                                                                  // 자원 할당 해제
 }
 
 extern "C"
 JNIEXPORT jfloatArray JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_GetCoordinates(
-        JNIEnv *env, jobject thiz, jint width, jint height)
+Java_com_sjlee_cardfinder_ViewActivity_GetCoordinates(JNIEnv *env, jobject thiz, jint width, jint height)
 {
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
 
@@ -686,33 +656,44 @@ Java_com_sjlee_cardfinder_ViewActivity_GetCoordinates(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_PullTasks(
-        JNIEnv *env, jobject thiz, jint width, jint height)
+Java_com_sjlee_cardfinder_ViewActivity_RemoveImageProcessingBufferInQueue(JNIEnv *env, jobject thiz, jint width, jint height)
 {
-
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
-    instance.PullTasks();                                                                                                    // task queue가 비어있을 때 까지 대기
+    instance.RemoveImageProcessingBufferInQueue();                                                                           // task queue가 비어있을 때 까지 대기
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_SetDefaultValue(
-        JNIEnv *env, jobject thiz, jint width, jint height)
+Java_com_sjlee_cardfinder_ViewActivity_SetDefaultValue(JNIEnv *env, jobject thiz, jint width, jint height)
 {
 
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
-                                                                                                                             // 초기값 설정
+    // ??? ????
     instance.ResetCoordinates();
-    instance.ResetStopImageProcessingBool();
-    instance.ResetClientBuffer();
+    instance.ResetStopImageProcessing();
 }
+
 
 extern "C"
 JNIEXPORT jboolean JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_IsEmptyClientBuffer(
-        JNIEnv *env, jobject thiz, jint width, jint height) {
-
+Java_com_sjlee_cardfinder_ViewActivity_StopImageProcessing(JNIEnv *env, jobject thiz, jint width, jint height)
+{
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
 
-    return instance.IsEmptyBuffer();                                                                                         // 클라이언트 내부 버퍼가 비어있는 여부 확인
+    return static_cast<jboolean>(instance.GetStopImageProcessing());
+}
+
+extern "C"
+JNIEXPORT jbyteArray JNICALL
+Java_com_sjlee_cardfinder_ViewActivity_GetImageBuffer(JNIEnv *env, jobject thiz, jint width, jint height)
+{
+    CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
+    
+    int size = instance.GetImageBuffer().size();
+
+    jbyteArray array = env->NewByteArray(size);
+
+    env->SetByteArrayRegion(array, 0, size, reinterpret_cast<jbyte *>(instance.GetImageBuffer().data()));
+
+    return array;
 }
