@@ -1,314 +1,367 @@
 package com.sjlee.cardfinder;
 
+import androidx.annotation.NonNull;
+import android.annotation.SuppressLint;
+import androidx.annotation.RequiresApi;
+
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.Camera;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageProxy;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
+import androidx.core.content.ContextCompat;
+import androidx.lifecycle.LifecycleOwner;
 
-import android.content.res.AssetManager;
-import android.os.Bundle;
-import android.widget.TextView;
-
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.appcompat.app.AlertDialog;
-
-
-import android.Manifest;
-import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Point;
+import android.graphics.Rect;
 
-import android.annotation.TargetApi;
-import android.content.pm.PackageManager;
+import android.media.Image;
 import android.os.Build;
-
+import android.os.Bundle;
+import android.util.Size;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.RelativeLayout;
+import com.google.common.util.concurrent.ListenableFuture;
+import java.nio.ByteBuffer;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-import com.googlecode.tesseract.android.TessBaseAPI;
+public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Analyzer {
 
-import android.graphics.BitmapFactory;
+    private ListenableFuture<ProcessCameraProvider> m_camera_provider_future;
+    private Point m_window_size;                                                                                         // 스마트폰 화면의 가로 세로 길이를 담는 객체
+    private ImageView m_roi_image_view, m_line_image_view;                                                               // 체크카드가 놓일 관심영역
+    private ProcessCameraProvider m_camera_provider;                                                                     // 카메라 프로바이더 객체
+    private PreviewView m_preview_view;                                                                                  // 미리보기뷰 객체
+    private Preview m_preview;                                                                                           // 미리보기 객체
+    private ImageAnalysis m_image_analizer;                                                                              // 이미지 아날라이저 객체
+    private ViewGroup.LayoutParams m_preview_layout;                                                                     // 뷰의 레이아웃을 변경하는 객체
+    private RelativeLayout.LayoutParams m_roi_layout;                                                                    // 이미지 분석 객체 가로 세로 길이
+    private int m_imageAnalysis_width, m_imageAnalysis_height;
+    private int m_image_view_left, m_image_view_top, m_image_view_w, m_image_view_h;                                     // 미리보기의 관심영역 x축, y축, 가로길이, 세로길이
+    private Button m_button_back;                                                                                        // 메인화면으로 이동하는 버튼
+    private Canvas m_roi_canvas, m_line_canvas;                                                                          // 미리보기 관심영역에 배경을 그리는 캔버스
+    private Bitmap m_roi_bitmap, m_line_bitmap;                                                                          // 미리보기 관심영역에 배경을 그리는 비트맵
+    private Paint m_paint;                                                                                               // 관심영역의 모서리 지점의 좌표를 저장하는 객체
+    private boolean m_executor_on;                                                                                       // Java 스레드풀 생성 여부와 관련한 boolean 값
+    private boolean m_close_btn_on, m_is_detected;
+    private ExecutorService m_pool;                                                                                      // Java 스레드풀 객체
+    private native void ImageProcessing(byte[] array, int width, int height);                                            // ImageAnalysis에서 획득한 영상을 분석하는 JNI nateve 함수
+    private native float[] GetCoordinates(int width, int height);                                                        // 교점을 초기화하는 JNI native 함수
+    private native byte[] GetImageBuffer(int width, int height);
+    private native boolean StopImageProcessing(int width, int height);
+    private native void SetDefaultValue(int width, int height);
+    private native void RemoveImageProcessingBufferInQueue(int width, int height);                                       // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
 
-import static android.Manifest.permission.CAMERA;
-
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
-
-public class MainActivity extends AppCompatActivity {
-
-    private static final int PERMISSION_REQUEST_CODE = 1234;
-    private Button m_view_button, m_clear_button, m_exit_button;                                    // 메튜 버튼, 지우기 버튼, 종료버튼
-    private TextView m_number_text_view, m_name_text_view, m_valid_text_view;                       // 체크카드 숫자결과 텍스트뷰, 체크카드 이름 텍스트 뷰
-    private String m_manifest_write = Manifest.permission.WRITE_EXTERNAL_STORAGE;                   // 외부 저장소 쓰기 사용 권한
-    private String m_manifest_read = Manifest.permission.READ_EXTERNAL_STORAGE;                     // 외부 저장소 읽기 사용 권한
-    private String m_manifest_camera = CAMERA;                                                      // 카메라 사용 권한
-    static private boolean m_have_permission;
-
-    private TessBaseAPI m_tess;
-    private String m_data_path;
-    private String m_lan;
-    private ActivityResultLauncher<Intent> m_launcher =
-            registerForActivityResult(
-                    new ActivityResultContracts.StartActivityForResult(), result ->
-                    {
-                        int code = result.getResultCode();
-
-                        if(code == RESULT_OK)                                                       // Activity Code가 RESULT_OK 이면 Main Activity 화면에 숫자와 문자를 표시한다
-                        {
-                            try {
-
-                                byte[] byte_arr = result.getData().getByteArrayExtra("Result");     // ViewActivity에서 받아온 체크카드 이미지 버퍼
-
-                                m_tess.setImage(                                                    // tesseract 객체에 bitmap으로 변환한 byte배열을 삽입
-                                        BitmapFactory.decodeByteArray( byte_arr, 0, byte_arr.length ));
-
-                                String tess_result = m_tess.getUTF8Text();                          // tesseract ocr 실행
-
-                                String numbers = null, name = null, valid_date = null;
-
-                                Pattern pattern;                                                    // 문자열의 검중을 수행하는 Pattern 객체
-                                Matcher matcher;                                                    // 문자열 내에 일치하는 문자열을 확인하기 위해 정규식을 이용하여 찾고 존재 여부를 반환해 주는 Matcher 객체
-                                
-                                pattern = Pattern.compile("(\\d{4}\\s\\d{4}\\s\\d{4}\\s\\d{4})");   // 0000 0000 0000 0000
-                                matcher = pattern.matcher(tess_result);
-
-                                if(matcher.matches())
-                                {
-                                    numbers = matcher.group();
-                                }
-                                
-                                pattern = Pattern.compile("([A-Z]{6}\\s|[A-Z]{9}\\s|[A-Z]{12}\\s)"); // 이름 알파벳의 개수가 6, 9, 12개인 패턴
-                                matcher = pattern.matcher(tess_result);
-                          
-                                if(matcher.matches())
-                                {
-                                    name = matcher.group();
-                                }
-                                
-                                pattern = Pattern.compile("(\\d{2}\\/\\d{2})");                     // 길이가 2개인 숫자 / 길이가 2개인 숫자
-                                matcher = pattern.matcher(tess_result);
-
-                                if(matcher.matches())
-                                {
-                                    valid_date = matcher.group();
-                                }
-                                
-                                m_number_text_view.setText(numbers);
-                                m_number_text_view.setTextColor(Color.parseColor("#00ff00"));
-                                m_name_text_view.setText(name);
-                                m_name_text_view.setTextColor(Color.parseColor("#00ff00"));
-                                m_valid_text_view.setText(valid_date);
-                                m_valid_text_view.setTextColor(Color.parseColor("#00ff00"));
-                            } catch (Exception e) {
-                                m_number_text_view.setText("Analizing Failed!");
-                                m_number_text_view.setTextColor(Color.parseColor("#ff0000"));
-                            }
-
-
-                        }
-
-                        if(code == RESULT_CANCELED){
-                            m_number_text_view.setText(result.getData().getStringExtra("Cancel"));
-                            m_number_text_view.setTextColor(Color.parseColor("#ff0000"));
-                        }
-
-                    });
-
-
-    static {
-        System.loadLibrary("CardFinder");
+    Executor getExecutor() {                                                                                             // 특정 테스크를 비동기적으로 실행시키기 위한
+        return ContextCompat.getMainExecutor(this);
     }
 
 
+    @RequiresApi(api = Build.VERSION_CODES.R)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+
+        setContentView(R.layout.activity_view);
 
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        m_number_text_view = (TextView) findViewById(R.id.numaber_text);                            // 특정 안드로이드의 뷰를 view id를 통해 받아온다
-        m_name_text_view = (TextView) findViewById(R.id.name_text);
-        m_valid_text_view = (TextView) findViewById(R.id.valid_text);
+        m_preview_view = (PreviewView) findViewById(R.id.previewView);                                                    // 카메라 미리보기 뷰
+        m_roi_image_view = (ImageView) findViewById(R.id.roi_view);
+        m_line_image_view = (ImageView) findViewById(R.id.line_view);
 
-        m_view_button = (Button) findViewById(R.id.view_button);                                    // view activity로 전환하는 버튼
-        m_clear_button = (Button) findViewById(R.id.clear_button);                                  // 분석결과 문자를 지우는 버튼
-        m_exit_button = (Button) findViewById(R.id.exit_button);
+        SetResolution();
 
-        m_data_path = getCacheDir() + "/tesseract";
-        m_lan = "eng";
+        m_button_back = (Button) findViewById(R.id.button);
 
-        m_view_button.setOnClickListener(new View.OnClickListener()                                 // view 버튼에 클릭 함수 등록 : view Activity로 진입한다
-        {
-            @Override
-            public void onClick(View v)
-            {
-                if(m_have_permission)                                                               // view Activity로 전환되기 전에 모든 퍼미션을 허가 받고 모델파일을 생성한 뒤에 view로 진입한다
-                {                                                                                   // 모델을 파일경로에 생성하기 전에 view로 진입하면 모델을 불러오는 코드가 예외가 발생하느 문제를 차단한다
-                    if(checkFile(new File(m_data_path + "/tessdata/")))
-                    {
-                        m_tess = new TessBaseAPI();
-
-                        boolean successity = m_tess.init(m_data_path, m_lan);
-
-                        Intent intent = new Intent(getApplicationContext(), ViewActivity.class);
-
-                        m_launcher.launch(intent);
-                    }
-                }
-            }
-        });
-
-        m_clear_button.setOnClickListener(new View.OnClickListener()                                // clear 버튼에 클릭 함수 등록 : 결과 텍스쳐를 지운다
-        {
+        m_button_back.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                m_number_text_view.setText("");
-                m_name_text_view.setText("");
-                m_valid_text_view.setText("");
+                m_close_btn_on = true;
+                m_executor_on = false;
+                Intent intent = new Intent(getApplicationContext(), MainActivity.class);
+                intent.putExtra("Cancel", "");
+                setResult(RESULT_CANCELED, intent);
+                finish();
             }
         });
 
-        m_exit_button.setOnClickListener(new View.OnClickListener()                                 // exit 버튼에 클릭 함수 등록   : 앱을 종료한다
-        {
-            @Override
-            public void onClick(View v) {
-                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-                builder.setMessage("You Wanna Exit?");
-                builder.setTitle("Terminate")
-                        .setCancelable(false)
-                        .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                finish();
-                            }
-                        })
-                        .setNegativeButton("No", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                dialog.cancel();
-                            }
-                        });
-                AlertDialog alert = builder.create();
-                alert.setTitle("Terminate");
-                alert.show();
+        m_camera_provider_future = ProcessCameraProvider.getInstance(this);
+
+        m_camera_provider_future.addListener(() -> {                                                                      // https://developer.android.com/training/camerax/architecture?hl=ko#java
+
+            try {
+                m_camera_provider = m_camera_provider_future.get();
+
+                m_camera_provider.unbindAll();
+
+                CameraSelector cameraSelector = new CameraSelector.Builder()
+                        .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                        .build();
+
+                m_preview = new Preview.Builder().build();
+
+
+                m_preview.setSurfaceProvider(m_preview_view.getSurfaceProvider());
+
+                m_image_analizer = new ImageAnalysis.Builder()
+                        .setTargetResolution(new Size(m_imageAnalysis_width, m_imageAnalysis_height))
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build();
+
+                m_image_analizer.setAnalyzer(getExecutor(), this);
+
+                Camera camera =
+                        m_camera_provider.bindToLifecycle((LifecycleOwner)
+                                this, cameraSelector, m_preview, m_image_analizer);
+
+
+                camera.getCameraControl().cancelFocusAndMetering();
+
+            } catch (ExecutionException | InterruptedException e) {
+                e.printStackTrace();
             }
-        });
+        }, getExecutor());
+
+        m_executor_on = true;
+
+        m_pool = Executors.newFixedThreadPool(1);
+
     }
-
 
     @Override
     protected void onStart()
     {
         super.onStart();
-        CheckPermission();
+
     }
 
     @Override
-    public void onPause() {
+    protected void onPause()
+    {
         super.onPause();
+
     }
 
     @Override
-    public void onResume()
+    protected  void onDestroy()
     {
-        super.onResume();
-        CheckPermission();
-    }
-
-    public void onDestroy() {
         super.onDestroy();
+
+        m_image_analizer.clearAnalyzer();
+
+        m_camera_provider.unbindAll();
+
+        m_pool.shutdown();
+
+        m_camera_provider_future.cancel(true);
     }
 
-    private void CheckPermission()
-    {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
-        {
-            int read_per = checkSelfPermission(m_manifest_write);
-            int write_per = checkSelfPermission(m_manifest_read);
-            int camera_per = checkSelfPermission(m_manifest_camera);
 
-            if (read_per + write_per + camera_per != PackageManager.PERMISSION_GRANTED)             // 모든 퍼미션을 허가 받지 않은 경우,
-                requestPermissions(new String[]{                                                    // requestPermission 실행
-                                m_manifest_write, m_manifest_read, m_manifest_camera},
-                        PERMISSION_REQUEST_CODE);
-            else{
-                m_have_permission = true;
-            }
+
+    private void SetResolution()                                                                                          //  16:9와 4:3 화면비율에 맞춰 PreviewView와 ImageAnalysis의 가로 세로 길이를 변경하는 함수
+    {
+        m_window_size = new Point();
+
+        getWindowManager().getDefaultDisplay().getRealSize(m_window_size);
+
+        m_preview_layout = (RelativeLayout.LayoutParams) m_preview_view.getLayoutParams();
+
+        if ((float) (m_window_size.y) / (float) (m_window_size.x) == (4.0f / 3.0f)) {
+            m_preview_layout.width = m_window_size.x;
+            m_preview_layout.height = m_window_size.y;
+
+            m_imageAnalysis_width = 1080;
+            m_imageAnalysis_height = 1440;
+        } else {
+            m_preview_layout.width = m_window_size.x;
+            m_preview_layout.height = (int) (m_window_size.x * (16.0f / 9.0f));
+
+            m_imageAnalysis_width = 1080;
+            m_imageAnalysis_height = 1920;
         }
+        m_preview_view.setLayoutParams(m_preview_layout);
     }
 
     @Override
-    @TargetApi(Build.VERSION_CODES.M)
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) // 퍼미션 요청의 결과를 확인하는 함수
+    public void onWindowFocusChanged(boolean hasFocus)                                                                   // 현재 화면이 보여지고 있는 상태인지 확인하는 함수이다
     {
-        if (requestCode == PERMISSION_REQUEST_CODE)
-            if((grantResults.length > 0) && (grantResults[0] + grantResults[1] + grantResults[2] == PackageManager.PERMISSION_GRANTED))
-            {
-                m_have_permission = true;
-            }
-            else
-            {
-                m_have_permission = false;
-            }
+        m_image_view_h = (int) (m_preview_view.getHeight() * 0.25f);                                                     // 미리보기 화면에서 관심영역의 세로길이
+        m_image_view_w = (int) (m_image_view_h * 1.618f);                                                                // 미리보기 화면에서 관심영역의 가로길이
+        m_image_view_left = (m_preview_view.getLeft() + (m_preview_view.getWidth() / 2)) - (m_image_view_w / 2);         // 미리보기 화면에서 관심영역이 위치할 x축
+        m_image_view_top = (m_preview_view.getTop() + (m_preview_view.getHeight() / 2)) - (m_image_view_h / 2);          // 미리보기 화면에서 관심영역이 위치할 y축
 
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        m_roi_layout = new RelativeLayout.LayoutParams(m_image_view_w, m_image_view_h);                                  // 레이아웃 파라미터 설정
+        m_roi_layout.setMargins(m_image_view_left, m_image_view_top, 0, 0);
+
+        m_roi_image_view.setLayoutParams(m_roi_layout);                                                                  // ImageView의 위치와 크기를 변경
+        m_line_image_view.setLayoutParams(m_roi_layout);
+
+        m_roi_bitmap = Bitmap.createBitmap(m_roi_layout.width, m_roi_layout.height, Bitmap.Config.ARGB_8888);            // ImageView의 가로세로 크기의 비트맵 생성
+        m_line_bitmap = Bitmap.createBitmap(m_roi_layout.width, m_roi_layout.height, Bitmap.Config.ARGB_8888);
+
+        m_roi_canvas = new Canvas(m_roi_bitmap);                                                                         // 캔버스 생성
+        m_line_canvas = new Canvas(m_line_bitmap);
+
+        m_paint = new Paint();                                                                                           // 브러쉬 생성
+        m_paint.setColor(Color.GREEN);                                                                                   // 브러쉬 색상
+        m_paint.setAntiAlias(true);                                                                                      // 안티애일리어싱 설정
+        m_paint.setStyle(Paint.Style.STROKE);                                                                            // 페인팅 스타일 설정
+        m_paint.setStrokeWidth(10);                                                                                      // 브러쉬 굵기 설정
+        m_paint.setARGB(255, 0, 255, 0);                                                                                 // 브러쉬 투명도 설정
+
+        m_roi_canvas.drawRect(new Rect(0, 0, m_roi_layout.width, m_roi_layout.height), m_paint);                         // ImageView의 가장자리에 초록색 직선을 그리기
+        m_roi_image_view.setImageBitmap(m_roi_bitmap);
+
+        if(m_executor_on)
+        {
+            RemoveImageProcessingBufferInQueue(m_imageAnalysis_height, m_imageAnalysis_width);                           // ViewActivity 호출 시 CardFinder Task를 모두 비운다
+            SetDefaultValue(m_imageAnalysis_height, m_imageAnalysis_width);                                              // CardFinder 인스턴스의 초기값 설정
+
+            m_pool.submit(new Runnable() {
+                @Override
+                public void run() {
+                    while (m_executor_on)
+                    {
+                        try
+                        {
+                            Thread.sleep(10);
+
+                            float[] coord = GetCoordinates(0, 0);
+
+                            if (coord.length != 0)
+                            {
+                                DrawCoordinates(                                                                         // 교점과 교점들을 이은 직선을 그리기
+                                        coord[0], coord[1], coord[2], coord[3],
+                                        coord[4], coord[5], coord[6], coord[7]);
+
+                                if(StopImageProcessing(m_imageAnalysis_height, m_imageAnalysis_width))                   // 클라이언트 내부 버퍼가 비어있는 여부 확인
+                                {
+                                    m_is_detected = true;
+                                    m_executor_on = false;
+                                }
+
+
+
+                            }
+
+                        } catch (InterruptedException e) {
+
+                        }
+                    }
+
+                    if(m_is_detected)
+                    {
+                        runOnUiThread(new Runnable() {                                                                   // UI 스레드에서 미리보기 뷰 프리징 실행
+                            @Override
+                            public void run() {
+                                m_camera_provider.unbind(m_preview);
+                            }
+                        });
+
+                        byte[] result_img = GetImageBuffer(0, 0);
+
+                        Intent intent = new Intent(getApplicationContext(), MainActivity.class);                         // MainActivity intend 생성
+
+                        intent.putExtra("Result", result_img);
+
+                        setResult(RESULT_OK, intent);                                                                    // MainActivity로 정보를 전달
+                    }
+
+
+                    if(!m_close_btn_on)
+                        finish();
+
+                }
+            });
+
+
+
+        }
+
+        super.onWindowFocusChanged(hasFocus);
     }
 
 
 
-    boolean checkFile(File dir)
+    @Override
+    public void onBackPressed()                                                                                          // 스마트폰의 뒤로가기 버튼을 누를 시 동작하는 함수
     {
-
-        if(!dir.exists() && dir.mkdirs()) {                                                           //디렉토리가 없으면 디렉토리를 만들고 그후에 파일을 카피
-            copyFiles();
-        }
-
-        if(dir.exists()) {                                                                            //디렉토리가 있지만 파일이 없으면 파일카피 진행
-            String datafilepath = m_data_path + "/tessdata/" + m_lan + ".traineddata";
-            File datafile = new File(datafilepath);
-            if(!datafile.exists()) {
-                copyFiles();
-            }
-        }
-        return true;
+        m_close_btn_on = true;
+        m_executor_on = false;
+        Intent intent = new Intent(getApplicationContext(), MainActivity.class);
+        intent.putExtra("Cancel", "");
+        setResult(RESULT_CANCELED, intent);
+        finish();
     }
-    void copyFiles()
+
+    @SuppressLint("UnsafeOptInUsageError")
+    @Override
+    public void analyze(@NonNull ImageProxy image)                                                                       // 머신러닝 등의 분석을 위해 CPU에서 액세스할 수 있는 버퍼를 획득하는 함수
     {
-        AssetManager assetMgr = this.getAssets();                                                     // 에셋폴더에 접근
-
-        InputStream is = null;
-        OutputStream os = null;
-
-        try {
-            is = assetMgr.open(m_lan +  ".traineddata");                                              // 에셋 매니저 객체로 에셋 폴더 내부에 있는 tesseract 학습 데이터 불러오기
-
-            String destFile = m_data_path + "/tessdata/" + m_lan + ".traineddata";                    // 에셋 폴더에 있는 학습자료를 저장할 스마트폰 내부 디렉토리 경로
-
-            os = new FileOutputStream(destFile);
-
-            byte[] buffer = new byte[1024];
-            int read;
-            while ((read = is.read(buffer)) != -1) {                                                  // 버퍼의 끝지점까지 읽기 반복
-                os.write(buffer, 0, read);
-            }
-            is.close();
-            os.flush();
-            os.close();
-
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        ImageProcessing(ImageToGrayscaleByte(image.getImage()), m_imageAnalysis_width, m_imageAnalysis_height);
+        image.close();
     }
+
+    public byte[] ImageToGrayscaleByte(Image image) {                                                                    // Image에서 GrayScale buffer를 얻는 함수
+
+        Image.Plane[] planes = image.getPlanes();                                                                        // 채널 plane획득
+
+        ByteBuffer yBuffer = planes[0].getBuffer();                                                                      // yChannel buffer 획득
+
+        int ySize = yBuffer.remaining();                                                                                 // yBuffer 크기
+
+        byte[] grayscale = new byte[ySize];                                                                              // ySize만큼 할당
+
+        yBuffer.get(grayscale, 0, ySize);                                                                                // grayscale buffer에 yBuffer에 들어있는 원소들을 모두 삽입
+
+        return grayscale;                                                                                                // grayscale buffer 반환
+    }
+
+
+    private void DrawCoordinates(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4)
+    {
+        runOnUiThread(new Runnable() {                                                                                   // UI 스레드에서 동작
+
+            @Override
+            public void run() {
+                m_paint.setStrokeWidth(5);                                                                               // 브러쉬 크기 변경
+                m_paint.setARGB(255, 255, 0, 0);                                                                         // 브러쉬 색상 변경
+                m_line_canvas.drawLine(x1, y1, x2, y2, m_paint);                                                         // 캔버스에 교점들을 이거 선을 그리기
+                m_line_canvas.drawLine(x2, y2, x4, y4, m_paint);
+                m_line_canvas.drawLine(x4, y4, x3, y3, m_paint);
+                m_line_canvas.drawLine(x3, y3, x1, y1, m_paint);
+
+                m_paint.setStrokeWidth(10);
+                m_paint.setARGB(255, 0, 0, 255);
+                m_line_canvas.drawCircle(x1, y1,10, m_paint);                                                            // 캔버스에 교점을 그리기
+                m_line_canvas.drawCircle(x2, y2,10, m_paint);
+                m_line_canvas.drawCircle(x3, y3,10, m_paint);
+                m_line_canvas.drawCircle(x4, y4,10, m_paint);
+                m_line_image_view.setImageBitmap(m_line_bitmap);
+            }
+        });
+    }
+
+
+    public int[] GetImageViewSize(){ return new int[]{m_image_view_w, m_image_view_h};}                                  // ImageView의 가로 세로 길이를 반환하는 함수
 }
+
