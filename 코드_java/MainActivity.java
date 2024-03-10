@@ -281,7 +281,7 @@ public class MainActivity extends AppCompatActivity {
         }
         return true;
     }
-    void copyFiles()
+    void copyFile()
     {
         AssetManager assetMgr = this.getAssets();                                                     // 에셋폴더에 접근
 
