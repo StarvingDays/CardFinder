@@ -228,7 +228,7 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    private void CheckPermission()
+    private void checkPermission()
     {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
         {
