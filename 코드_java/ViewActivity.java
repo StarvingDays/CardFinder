@@ -60,12 +60,12 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     private boolean m_executor_on;                                                                                       // Java 스레드풀 생성 여부와 관련한 boolean 값
     private boolean m_close_btn_on, m_is_detected;
     private ExecutorService m_pool;                                                                                      // Java 스레드풀 객체
-    private native void ImageProcessing(byte[] array, int width, int height);                                            // ImageAnalysis에서 획득한 영상을 분석하는 JNI nateve 함수
+    private native void ImagePreProcessing(byte[] array, int width, int height);                                            // ImageAnalysis에서 획득한 영상을 분석하는 JNI nateve 함수
     private native float[] GetCoordinates(int width, int height);                                                        // 교점을 초기화하는 JNI native 함수
     private native byte[] GetImageBuffer(int width, int height);
-    private native boolean StopImageProcessing(int width, int height);
+    private native boolean StopImagePreProcessing(int width, int height);
     private native void SetDefaultValue(int width, int height);
-    private native void RemoveImageProcessingBufferInQueue(int width, int height);                                       // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
+    private native void RemoveImagePreProcessingBuffer(int width, int height);                                       // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
 
     Executor getExecutor() {                                                                                             // 특정 테스크를 비동기적으로 실행시키기 위한
         return ContextCompat.getMainExecutor(this);
@@ -233,7 +233,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
 
         if(m_executor_on)
         {
-            RemoveImageProcessingBufferInQueue(m_imageAnalysis_height, m_imageAnalysis_width);                           // ViewActivity 호출 시 CardFinder Task를 모두 비운다
+            RemoveImagePreProcessingBuffer(m_imageAnalysis_height, m_imageAnalysis_width);                           // ViewActivity 호출 시 CardFinder Task를 모두 비운다
             SetDefaultValue(m_imageAnalysis_height, m_imageAnalysis_width);                                              // CardFinder 인스턴스의 초기값 설정
 
             m_pool.submit(new Runnable() {
@@ -253,7 +253,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
                                         coord[0], coord[1], coord[2], coord[3],
                                         coord[4], coord[5], coord[6], coord[7]);
 
-                                if(StopImageProcessing(m_imageAnalysis_height, m_imageAnalysis_width))                   // 클라이언트 내부 버퍼가 비어있는 여부 확인
+                                if(StopImagePreProcessing(m_imageAnalysis_height, m_imageAnalysis_width))                   // 클라이언트 내부 버퍼가 비어있는 여부 확인
                                 {
                                     m_is_detected = true;
                                     m_executor_on = false;
@@ -317,7 +317,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     @Override
     public void analyze(@NonNull ImageProxy image)                                                                       // 머신러닝 등의 분석을 위해 CPU에서 액세스할 수 있는 버퍼를 획득하는 함수
     {
-        ImageProcessing(ImageToGrayscaleByte(image.getImage()), m_imageAnalysis_width, m_imageAnalysis_height);
+        ImagePreProcessing(ImageToGrayscaleByte(image.getImage()), m_imageAnalysis_width, m_imageAnalysis_height);
         image.close();
     }
 
