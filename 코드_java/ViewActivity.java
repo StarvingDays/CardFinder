@@ -60,12 +60,13 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     private boolean m_executor_on;                                                                                       // Java 스레드풀 생성 여부와 관련한 boolean 값
     private boolean m_close_btn_on, m_is_detected;
     private ExecutorService m_pool;                                                                                      // Java 스레드풀 객체
-    private native void ImagePreProcessing(byte[] array, int width, int height);                                            // ImageAnalysis에서 획득한 영상을 분석하는 JNI nateve 함수
+    
+    private native void ImagePreProcessing(byte[] array, int width, int height);                                         // ImageAnalysis에서 획득한 영상을 분석하는 JNI nateve 함수
     private native float[] GetCoordinates(int width, int height);                                                        // 교점을 초기화하는 JNI native 함수
     private native byte[] GetImageBuffer(int width, int height);
     private native boolean StopImagePreProcessing(int width, int height);
     private native void SetDefaultValue(int width, int height);
-    private native void RemoveImagePreProcessingBuffer(int width, int height);                                       // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
+    private native void RemoveImagePreProcessingBuffer(int width, int height);                                           // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
 
     Executor getExecutor() {                                                                                             // 특정 테스크를 비동기적으로 실행시키기 위한
         return ContextCompat.getMainExecutor(this);
