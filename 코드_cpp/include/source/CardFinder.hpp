@@ -30,17 +30,17 @@ public:
     static CardFinder& GetInstance(JNIEnv& env, jobject& obj, int& w, int& h);
     // 영상 분석 시작함수
     auto InputImgData(unsigned char* data, jint& col, jint& row);
-    auto ImageProcessing(std::vector<uchar>& img_buffer) -> void;
+    auto ImagePreProcessing(std::vector<uchar>& img_buffer) -> void;
     // 전체 관심영역 반환 함수
     // 체크카드를 포착하여 얻은 네 개의 교점을 반환하는 함수
     auto GetCoordinates() -> std::vector<float>;
     auto GetImageBuffer() -> std::vector<uchar>&;
-    auto GetStopImageProcessing() -> bool;
+    auto GetStopImagePreProcessing() -> bool;
     // 네 개의 교점 데이터가 저장된 객체를 초기화하는 함수
     auto ResetCoordinates() -> void;
     auto ResetStopImageProcessing() -> void;
 
-    auto RemoveImageProcessingBufferInQueue() -> void;
+    auto RemoveImagePreProcessingBuffer() -> void;
     // 소멸자
     ~CardFinder();
 
