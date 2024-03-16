@@ -1,7 +1,7 @@
 package com.sjlee.cardfinder;
 
 import androidx.appcompat.app.AppCompatActivity;
-
+import android.content.Context;
 import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.widget.TextView;
@@ -9,7 +9,6 @@ import android.widget.TextView;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
-
 
 import android.Manifest;
 import android.content.DialogInterface;
@@ -25,8 +24,6 @@ import android.view.WindowManager;
 import android.widget.Button;
 
 import com.googlecode.tesseract.android.TessBaseAPI;
-
-import android.graphics.BitmapFactory;
 
 import static android.Manifest.permission.CAMERA;
 
@@ -47,11 +44,11 @@ public class MainActivity extends AppCompatActivity {
     private String m_manifest_write = Manifest.permission.WRITE_EXTERNAL_STORAGE;                   // 외부 저장소 쓰기 사용 권한
     private String m_manifest_read = Manifest.permission.READ_EXTERNAL_STORAGE;                     // 외부 저장소 읽기 사용 권한
     private String m_manifest_camera = CAMERA;                                                      // 카메라 사용 권한
-    static private boolean m_have_permission;
-
-    private TessBaseAPI m_tess;
-    private String m_data_path;
-    private String m_lan;
+    private boolean m_have_permission;
+    public static Context m_main_context;                                                           // MainActivity 컨텍스트
+    public TessBaseAPI m_tess;                                                                      // Tesseract 객체
+    private String m_data_path;                                                                     // Tesseract 데이터 경로
+    private String m_lan;                                                                           // Tesseract 데이터 언어
     private ActivityResultLauncher<Intent> m_launcher =
             registerForActivityResult(
                     new ActivityResultContracts.StartActivityForResult(), result ->
@@ -62,12 +59,7 @@ public class MainActivity extends AppCompatActivity {
                         {
                             try {
 
-                                byte[] byte_arr = result.getData().getByteArrayExtra("Result");     // ViewActivity에서 받아온 체크카드 이미지 버퍼
-
-                                m_tess.setImage(                                                    // tesseract 객체에 bitmap으로 변환한 byte배열을 삽입
-                                        BitmapFactory.decodeByteArray( byte_arr, 0, byte_arr.length ));
-
-                                String tess_result = m_tess.getUTF8Text();                          // tesseract ocr 실행
+                                String card_data = result.getData().getStringExtra("Result");       // ViewActivity에서 받아온 체크카드 이미지 버퍼
 
                                 String numbers = null, name = null, valid_date = null;
 
@@ -75,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
                                 Matcher matcher;                                                    // 문자열 내에 일치하는 문자열을 확인하기 위해 정규식을 이용하여 찾고 존재 여부를 반환해 주는 Matcher 객체
                                 
                                 pattern = Pattern.compile("(\\d{4}\\s\\d{4}\\s\\d{4}\\s\\d{4})");   // 0000 0000 0000 0000
-                                matcher = pattern.matcher(tess_result);
+                                matcher = pattern.matcher(card_data);
 
                                 if(matcher.matches())
                                 {
@@ -83,7 +75,7 @@ public class MainActivity extends AppCompatActivity {
                                 }
                                 
                                 pattern = Pattern.compile("([A-Z]{6}\\s|[A-Z]{9}\\s|[A-Z]{12}\\s)"); // 이름 알파벳의 개수가 6, 9, 12개인 패턴
-                                matcher = pattern.matcher(tess_result);
+                                matcher = pattern.matcher(card_data);
                           
                                 if(matcher.matches())
                                 {
@@ -91,7 +83,7 @@ public class MainActivity extends AppCompatActivity {
                                 }
                                 
                                 pattern = Pattern.compile("(\\d{2}\\/\\d{2})");                     // 길이가 2개인 숫자 / 길이가 2개인 숫자
-                                matcher = pattern.matcher(tess_result);
+                                matcher = pattern.matcher(card_data);
 
                                 if(matcher.matches())
                                 {
@@ -157,7 +149,7 @@ public class MainActivity extends AppCompatActivity {
                     {
                         m_tess = new TessBaseAPI();
 
-                        boolean successity = m_tess.init(m_data_path, m_lan);
+                        m_tess.init(m_data_path, m_lan);
 
                         Intent intent = new Intent(getApplicationContext(), ViewActivity.class);
 
@@ -202,6 +194,8 @@ public class MainActivity extends AppCompatActivity {
                 alert.show();
             }
         });
+
+        m_main_context = this;
     }
 
 
@@ -228,7 +222,7 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    private void checkPermission()
+    private void CheckPermission()
     {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
         {
@@ -281,7 +275,7 @@ public class MainActivity extends AppCompatActivity {
         }
         return true;
     }
-    void copyFile()
+    void copyFiles()
     {
         AssetManager assetMgr = this.getAssets();                                                     // 에셋폴더에 접근
 
