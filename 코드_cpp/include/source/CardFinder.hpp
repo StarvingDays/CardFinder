@@ -29,18 +29,9 @@ public:
     // Singleton Instance 생성 함수
     static CardFinder& GetInstance(JNIEnv& env, jobject& obj, int& w, int& h);
     // 영상 분석 시작함수
-    auto InputImgData(unsigned char* data, jint& col, jint& row);
-    auto ImagePreProcessing(std::vector<uchar>& img_buffer) -> void;
+    auto InputImageData(unsigned char* data, jint& col, jint& row);
     // 전체 관심영역 반환 함수
-    // 체크카드를 포착하여 얻은 네 개의 교점을 반환하는 함수
-    auto GetCoordinates() -> std::vector<float>;
-    auto GetImageBuffer() -> std::vector<uchar>&;
-    auto GetStopImagePreProcessing() -> bool;
-    // 네 개의 교점 데이터가 저장된 객체를 초기화하는 함수
-    auto ResetCoordinates() -> void;
-    auto ResetStopImageProcessing() -> void;
-
-    auto RemoveImagePreProcessingBuffer() -> void;
+    auto RemoveImagePreProcessing() -> void;
     // 소멸자
     ~CardFinder();
 
@@ -48,7 +39,9 @@ public:
 private:
     // CardFinder Instance 생성자
     CardFinder(JNIEnv& env, jobject& obj, int& w, int& h);
-    // android studio java PreviewView의 roi size를 획득하는 함수
+    // 이미지 전처리 함수
+    auto ImagePreProcessing(std::vector<uchar>& img_buffer) -> void;
+    // 안드로이드 스튜디오 java PreviewView의 관심영역의 크기를 획득하는 함수
     auto GetImageViewSize(JNIEnv& env, jobject& obj, const char* class_dir) -> cv::Size;
     // 전체 관심영역을 획득하는 함수
     auto SetCapturedArea(int w, int h) -> cv::Rect;
@@ -62,8 +55,6 @@ private:
     auto SetBrightCorrectionField() -> cv::Mat;
     // 푸리에 변환에 사용되는 가우시안 필터를 만드는 함수
     auto SetGaussianFilters(cv::Size size, double D0) -> std::vector<cv::Mat>;
-    // 네 개의 교점에 Scale factor를 곱하는 함수
-    auto SetCoordinates(cv::Point2f& pt1, cv::Point2f& pt2, cv::Point2f& pt3, cv::Point2f& pt4) -> void;
     // Contrast Limiting Adaptive Histogram Equalization 객체 생성 함수
     auto SetCLAHE(double limit_var, cv::Size tile_size) -> cv::Ptr<cv::CLAHE>;
     // 체크카드의 가로 세로 직선을 얻는 함수
@@ -75,6 +66,8 @@ private:
     // 푸리에 HomomorhpicFitering을 수행하는 함수
     auto HomomorphicCorrect(cv::Mat& src, cv::Mat& filter) -> cv::Mat;
 
+
+private:
     // android studio java analize 함수에서 받아오는 ImageProxy 인스턴스의 가로 세로 사이즈
     cv::Size m_image_view_size;
     // android studio java PreviewView의 roi size
@@ -95,20 +88,23 @@ private:
     std::shared_ptr<cv::CLAHE> m_clahe;
     // 가우시안 저주파 및 고주파 필터
     std::vector<cv::Mat> m_gaussian_filters;
-    // 전체 관심영역으로 포착된 이미지
-    std::vector<jfloat> m_res_coordinate;
-    // json 포멧의 response 패킷의 body 메세지가 저장되는 string 객체
-    std::vector<uchar> m_image_buffer;
-    // 이미지 전처리 중단용 atomic<bool>
-    bool m_stop_image_processing;
     // pulling 스레드 내부의 while 루프용 atomic<bool>
-    std::atomic_bool m_pull_thr_on;
+    std::atomic_bool m_thread_pool_on;
     // 이미지 전처리 작업 큐
     std::queue<std::vector<uchar>> m_image_data_queue;
-    // task queue pulling 스레드
-    std::vector<std::thread> m_pull_thr;
+    // 스레드풀
+    std::vector<std::thread> m_thread_pool;
     // 스레드 대기용 객체
     std::condition_variable m_conv;
     // 스레드 임계영역 처리용 mutex
-    std::mutex m_pulling_tasks_mutex, m_image_precessing_mutex, m_cross_pt_mutex;
+    std::mutex m_thread_pool_mutex;
+public:
+    // 전체 관심영역으로 포착된 이미지
+    std::vector<jfloat> m_res_coordinate;
+    // 이미지 전처리 중단용 atomic<bool>
+    bool m_stop_image_pre_processing_status;
+    // json 포멧의 response 패킷의 body 메세지가 저장되는 string 객체
+    std::vector<uchar> m_checkcard_image_buffer;
+    // 스레드 임계영역 처리용 mutex
+    std::mutex m_image_pre_precessing_mutex;
 };
