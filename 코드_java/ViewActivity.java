@@ -17,6 +17,7 @@ import androidx.lifecycle.LifecycleOwner;
 
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -34,6 +35,8 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.googlecode.tesseract.android.TessBaseAPI;
+
 import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -59,14 +62,16 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     private Paint m_paint;                                                                                               // 관심영역의 모서리 지점의 좌표를 저장하는 객체
     private boolean m_executor_on;                                                                                       // Java 스레드풀 생성 여부와 관련한 boolean 값
     private boolean m_close_btn_on, m_is_detected;
-    private ExecutorService m_pool;                                                                                      // Java 스레드풀 객체
-    
+    private ExecutorService m_thread_pool;                                                                               // Java 스레드풀 객체
+
+    private byte[] m_checkcard_image_buffer;
     private native void ImagePreProcessing(byte[] array, int width, int height);                                         // ImageAnalysis에서 획득한 영상을 분석하는 JNI nateve 함수
     private native float[] GetCoordinates(int width, int height);                                                        // 교점을 초기화하는 JNI native 함수
     private native byte[] GetImageBuffer(int width, int height);
-    private native boolean StopImagePreProcessing(int width, int height);
+    private native boolean GetImagePreProcessingStatus(int width, int height);
     private native void SetDefaultValue(int width, int height);
-    private native void RemoveImagePreProcessingBuffer(int width, int height);                                           // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
+    private native void RemoveImagePreProcessing(int width, int height);                                                 // CardFinder 인스턴스의 task queue를 비우는 JNI native 함수
+
 
     Executor getExecutor() {                                                                                             // 특정 테스크를 비동기적으로 실행시키기 위한
         return ContextCompat.getMainExecutor(this);
@@ -144,7 +149,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
 
         m_executor_on = true;
 
-        m_pool = Executors.newFixedThreadPool(1);
+        m_thread_pool = Executors.newFixedThreadPool(1);
 
     }
 
@@ -171,7 +176,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
 
         m_camera_provider.unbindAll();
 
-        m_pool.shutdown();
+        m_thread_pool.shutdown();
 
         m_camera_provider_future.cancel(true);
     }
@@ -234,10 +239,10 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
 
         if(m_executor_on)
         {
-            RemoveImagePreProcessingBuffer(m_imageAnalysis_height, m_imageAnalysis_width);                           // ViewActivity 호출 시 CardFinder Task를 모두 비운다
+            RemoveImagePreProcessing(m_imageAnalysis_height, m_imageAnalysis_width);                                     // ViewActivity 호출 시 CardFinder Task를 모두 비운다
             SetDefaultValue(m_imageAnalysis_height, m_imageAnalysis_width);                                              // CardFinder 인스턴스의 초기값 설정
 
-            m_pool.submit(new Runnable() {
+            m_thread_pool.submit(new Runnable() {
                 @Override
                 public void run() {
                     while (m_executor_on)
@@ -248,21 +253,22 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
 
                             float[] coord = GetCoordinates(0, 0);
 
-                            if (coord.length != 0)
+                            m_checkcard_image_buffer = GetImageBuffer(0, 0);
+
+                            if (GetImagePreProcessingStatus(m_imageAnalysis_height, m_imageAnalysis_width)
+                                    && coord.length != 0
+                                    && m_checkcard_image_buffer != null)
                             {
                                 DrawCoordinates(                                                                         // 교점과 교점들을 이은 직선을 그리기
                                         coord[0], coord[1], coord[2], coord[3],
                                         coord[4], coord[5], coord[6], coord[7]);
 
-                                if(StopImagePreProcessing(m_imageAnalysis_height, m_imageAnalysis_width))                   // 클라이언트 내부 버퍼가 비어있는 여부 확인
-                                {
-                                    m_is_detected = true;
-                                    m_executor_on = false;
-                                }
-
-
+                                m_is_detected = true;
+                                m_executor_on = false;
 
                             }
+
+
 
                         } catch (InterruptedException e) {
 
@@ -277,12 +283,15 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
                                 m_camera_provider.unbind(m_preview);
                             }
                         });
+                        TessBaseAPI tess = ((MainActivity)MainActivity.m_main_context).m_tess;
 
-                        byte[] result_img = GetImageBuffer(0, 0);
+                        tess.setImage(                                                                                   // Teseract 객체에 체크카드 이미지 버퍼를 삽입 
+                                BitmapFactory.decodeByteArray( m_checkcard_image_buffer, 0, m_checkcard_image_buffer.length )
+                        );
 
                         Intent intent = new Intent(getApplicationContext(), MainActivity.class);                         // MainActivity intend 생성
 
-                        intent.putExtra("Result", result_img);
+                        intent.putExtra("Result", tess.getUTF8Text());                                                   // Tesseract OCR 분석 결과값을 Intent 객체에 삽입
 
                         setResult(RESULT_OK, intent);                                                                    // MainActivity로 정보를 전달
                     }
@@ -308,6 +317,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     {
         m_close_btn_on = true;
         m_executor_on = false;
+
         Intent intent = new Intent(getApplicationContext(), MainActivity.class);
         intent.putExtra("Cancel", "");
         setResult(RESULT_CANCELED, intent);
