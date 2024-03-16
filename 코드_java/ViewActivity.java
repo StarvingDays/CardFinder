@@ -60,8 +60,7 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     private Canvas m_roi_canvas, m_line_canvas;                                                                          // 미리보기 관심영역에 배경을 그리는 캔버스
     private Bitmap m_roi_bitmap, m_line_bitmap;                                                                          // 미리보기 관심영역에 배경을 그리는 비트맵
     private Paint m_paint;                                                                                               // 관심영역의 모서리 지점의 좌표를 저장하는 객체
-    private boolean m_executor_on;                                                                                       // Java 스레드풀 생성 여부와 관련한 boolean 값
-    private boolean m_close_btn_on, m_is_detected;
+    private boolean m_executor_on, m_close_btn_on, m_is_detected;                                                        // Java 스레드풀 생성 여부와 관련한 boolean 값
     private ExecutorService m_thread_pool;                                                                               // Java 스레드풀 객체
 
     private byte[] m_checkcard_image_buffer;
