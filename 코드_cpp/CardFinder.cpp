@@ -12,20 +12,20 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
         m_br_correction_field(SetBrightCorrectionField()),                                                           // 최소자승 보정으로 인한 결과 영상을 저장하는 영상(전체영역, 가로영역, 세로영역)
         m_clahe(SetCLAHE(4.0, cv::Size(8, 8))),                                                                      // 침식 및 확장 연산시 사용되는 커널
         m_gaussian_filters(SetGaussianFilters(m_captured_area.size(), 30)),                                          // 가우시안 low, high 필터
-        m_stop_image_processing(false),
-        m_pull_thr_on(true),
-        m_pull_thr(2)
+        m_stop_image_pre_processing_status(false),
+        m_thread_pool_on(true),
+        m_thread_pool(2)
 {
-    for(int i = 0; i < m_pull_thr.size(); ++i)
+    for(int i = 0; i < m_thread_pool.size(); ++i)
     {
-        m_pull_thr[i] = std::thread([this](){                                                                        // 버퍼에서 저장된 future 타입객체를 꺼내는 스레드를 생성하여 실행한다
+        m_thread_pool[i] = std::thread([this](){                                                                     // 버퍼에서 저장된 future 타입객체를 꺼내는 스레드를 생성하여 실행한다
 
-            while(m_pull_thr_on.load(std::memory_order_acquire))                                                     // m_pull_thr_on 값이 참일 때 while 루프 실행
+            while(m_thread_pool_on.load(std::memory_order_acquire))                                                  // m_pull_thr_on 값이 참일 때 while 루프 실행
             {
                 std::vector<uchar> buf;
 
                 {
-                    std::unique_lock<std::mutex> lcok(m_pulling_tasks_mutex);                                        // 임계 영역 설정
+                    std::unique_lock<std::mutex> lcok(m_thread_pool_mutex);                                          // 임계 영역 설정
 
                     m_conv.wait(lcok, [this]{ return !m_image_data_queue.empty(); });                                // m_processing_tasks 버퍼가 비어있는 경우 모든 스레드를 대기시킨다
 
@@ -35,7 +35,7 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
                                                                                                                      // lock 해체
                 }
 
-                this->ImageProcessing(buf);                                                                          // 이미지 프로세싱 실행
+                this->ImagePreProcessing(buf);                                                                       // 이미지 프로세싱 실행
             }
         });
     }
@@ -43,11 +43,11 @@ CardFinder::CardFinder(JNIEnv& env, jobject& obj, int& w, int& h)
 
 CardFinder::~CardFinder()
 {
-    m_pull_thr_on.store(false, std::memory_order_release);                                                           // while 루프 탈출
+    m_thread_pool_on.store(false, std::memory_order_release);                                                        // while 루프 탈출
     
     m_conv.notify_all();                                                                                             // 소멸자 호출 시 모든 스레드들을 꺠운다
 
-    for(int i = 0; i < m_pull_thr.size(); ++i) m_pull_thr[i].join();                                                 // thread join
+    for(int i = 0; i < m_thread_pool.size(); ++i) m_thread_pool[i].join();                                           // thread join
 }
 
 CardFinder& CardFinder::GetInstance(JNIEnv& env, jobject& obj, int& w, int& h)
@@ -96,7 +96,6 @@ auto CardFinder::SetScaleFactor(int w, int h) -> cv::Point2f
             static_cast<float>(m_image_view_size.width) / static_cast<float>(m_captured_area.height),
             static_cast<float>(m_image_view_size.height) / static_cast<float>(m_captured_area.width));
 }
-
 
 auto CardFinder::SetPartsOfCapturedArea() -> Rects
 {
@@ -208,7 +207,6 @@ auto CardFinder::SetGaussianFilters(cv::Size size, double D0) -> std::vector<cv:
     return filter;
 }
 
-
 auto CardFinder::SetCLAHE(double limit_var, cv::Size tile_size) -> cv::Ptr<cv::CLAHE>
 {
     cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();                                                                    // CLAHE 객체 생성
@@ -280,8 +278,6 @@ auto CardFinder::FindLines(cv::Mat& src, AreaLocation arealoc) -> Lines {
     return resultP;
 }
 
-
-
 auto CardFinder::FindCorner(Lines& lines1, Lines& lines2) -> cv::Point2f
 {
     cv::Point2f res_pt;
@@ -321,7 +317,6 @@ auto CardFinder::FindCorner(Lines& lines1, Lines& lines2) -> cv::Point2f
 
     return res_pt;
 }
-
 
 auto CardFinder::BrightCorrect(cv::Mat& src) -> cv::Mat&
 {
@@ -394,10 +389,10 @@ auto CardFinder::HomomorphicCorrect(cv::Mat& src, cv::Mat& filter) -> cv::Mat
     return complex;
 }
 
-auto CardFinder::InputImgData(unsigned char* data, jint& col, jint& row)
+auto CardFinder::InputImageData(unsigned char* data, jint& col, jint& row)
 {
     {
-        std::lock_guard<std::mutex> lock(m_pulling_tasks_mutex);
+        std::lock_guard<std::mutex> lock(m_thread_pool_mutex);
 
         m_image_data_queue.push(std::vector<uchar>(data, data + (col * row)));
 
@@ -405,7 +400,7 @@ auto CardFinder::InputImgData(unsigned char* data, jint& col, jint& row)
     }
 }
 
-auto CardFinder::ImageProcessing(std::vector<uchar>& img_buffer) -> void
+auto CardFinder::ImagePreProcessing(std::vector<uchar>& img_buffer) -> void
 {
 
     try
@@ -536,11 +531,11 @@ auto CardFinder::ImageProcessing(std::vector<uchar>& img_buffer) -> void
                         img = Rotate90<uchar, CV_8UC1>(img);                                                     // 90도 회전 실행
 
                         {
-                            std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
+                            std::lock_guard<std::mutex> lock(m_image_pre_precessing_mutex);
 
-                            if(!m_stop_image_processing)
+                            if(!m_stop_image_pre_processing_status)
                             {
-                                m_stop_image_processing = true;
+                                m_stop_image_pre_processing_status = true;
 
                                 m_res_coordinate = {                                                            // 관심영역에 위치한 체크카드의 교점 네 곳이 ImageView에서의 위치비율과
                                         rot_pt3.x * m_scale_factor.x, rot_pt3.y * m_scale_factor.y,             // 호환되도록 교점의 x,y축에 스케일 팩터를 곱한다
@@ -550,7 +545,7 @@ auto CardFinder::ImageProcessing(std::vector<uchar>& img_buffer) -> void
                                 };
 
 
-                                cv::imencode(".png", img, m_image_buffer);
+                                cv::imencode(".png", img, m_checkcard_image_buffer);
                             }
                         }
                     }
@@ -564,74 +559,27 @@ auto CardFinder::ImageProcessing(std::vector<uchar>& img_buffer) -> void
     }
 }
 
-auto CardFinder::RemoveImageProcessingBufferInQueue() -> void
+auto CardFinder::RemoveImagePreProcessing() -> void
 {
     {
-        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
+        std::lock_guard<std::mutex> lock(m_thread_pool_mutex);
         std::queue<std::vector<uchar>> temp;
         std::swap(m_image_data_queue, temp);
     }
 }
 
-auto CardFinder::GetStopImageProcessing() -> bool
-{
-    bool is_stop;
-    {
-        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
-        is_stop = m_stop_image_processing;
-    }
-    return is_stop;
-}
-
-auto CardFinder::GetCoordinates() -> std::vector<float>
-{
-    std::vector<float> res;
-    {
-        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
-        res = std::move(m_res_coordinate);
-    }
-
-    return res;
-}
-
-auto CardFinder::GetImageBuffer() ->std::vector<uchar>&
-{
-    return m_image_buffer;
-}
-
-auto CardFinder::ResetCoordinates() -> void
-{
-    {
-        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
-        m_res_coordinate.clear();                                                                                            // 저장된 교점 데이터 초기화
-    }
-}
-
-auto CardFinder::ResetStopImageProcessing() -> void
-{
-    {
-        std::lock_guard<std::mutex> lock(m_image_precessing_mutex);
-        m_stop_image_processing = false;
-        m_image_buffer.clear();
-    }
-
-
-
-}
-
-
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_ImageProcessing(JNIEnv *env, jobject thiz, jbyteArray array, jint width, jint height)
+Java_com_sjlee_cardfinder_ViewActivity_ImagePreProcessing(JNIEnv *env, jobject thiz, jbyteArray array, jint width, jint height)
 {
 
-    CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);                                               // 싱글턴 CardFinder 객체 생성
+    CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);                                  // 싱글턴 CardFinder 객체 생성
 
-    jbyte* yData = env->GetByteArrayElements(array, nullptr);                                                                // yData는 GetByteArrayElements함수로 받아온 jbyte 타입 객체를 가리킨다
+    jbyte* yData = env->GetByteArrayElements(array, nullptr);                                                   // yData는 GetByteArrayElements함수로 받아온 jbyte 타입 객체를 가리킨다
 
-    instance.InputImgData(reinterpret_cast<unsigned char*>(yData), width, height);
+    instance.InputImageData(reinterpret_cast<unsigned char*>(yData), width, height);
 
-    env->ReleaseByteArrayElements(array, yData, JNI_ABORT);                                                                  // 자원 할당 해제
+    env->ReleaseByteArrayElements(array, yData, JNI_ABORT);                                                     // 자원 할당 해제
 }
 
 extern "C"
@@ -640,47 +588,23 @@ Java_com_sjlee_cardfinder_ViewActivity_GetCoordinates(JNIEnv *env, jobject thiz,
 {
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
 
-    std::vector<float> arr = instance.GetCoordinates();                                                                      // 체크카드 네 개 모서리의 교점을 획득
+    std::vector<float> arr;                                                                                      // 체크카드 네 개 모서리의 교점을 획득
 
-    jfloatArray javaArray = env->NewFloatArray(0);                                                                           // 비어있는 jfloatArray 생성
+    {
+        std::lock_guard<std::mutex> lock(instance.m_image_pre_precessing_mutex);
+        arr = std::move(instance.m_res_coordinate);
+    }
+
+    jfloatArray javaArray = nullptr;                                                                             // 비어있는 jfloatArray 생성
 
     if(!arr.empty())
     {
         int size = arr.size();
-        javaArray = env->NewFloatArray(size);                                                                                // javaArray에 size크기 만큼 할당
-        env->SetFloatArrayRegion(javaArray, 0, size, arr.data());                                                            // javaArray에 arr에 있는 원소들을 삽입
+        javaArray = env->NewFloatArray(size);                                                                    // javaArray에 size크기 만큼 할당
+        env->SetFloatArrayRegion(javaArray, 0, size, arr.data());                                                // javaArray에 arr에 있는 원소들을 삽입
     }
 
     return javaArray;
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_RemoveImageProcessingBufferInQueue(JNIEnv *env, jobject thiz, jint width, jint height)
-{
-    CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
-    instance.RemoveImageProcessingBufferInQueue();                                                                           // task queue가 비어있을 때 까지 대기
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_SetDefaultValue(JNIEnv *env, jobject thiz, jint width, jint height)
-{
-
-    CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
-    // ??? ????
-    instance.ResetCoordinates();
-    instance.ResetStopImageProcessing();
-}
-
-
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_sjlee_cardfinder_ViewActivity_StopImageProcessing(JNIEnv *env, jobject thiz, jint width, jint height)
-{
-    CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
-
-    return static_cast<jboolean>(instance.GetStopImageProcessing());
 }
 
 extern "C"
@@ -688,12 +612,57 @@ JNIEXPORT jbyteArray JNICALL
 Java_com_sjlee_cardfinder_ViewActivity_GetImageBuffer(JNIEnv *env, jobject thiz, jint width, jint height)
 {
     CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
-    
-    int size = instance.GetImageBuffer().size();
 
-    jbyteArray array = env->NewByteArray(size);
+    int size = 0;
 
-    env->SetByteArrayRegion(array, 0, size, reinterpret_cast<jbyte *>(instance.GetImageBuffer().data()));
+    jbyteArray array = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(instance.m_image_pre_precessing_mutex);
+
+        size = instance.m_checkcard_image_buffer.size();
+
+        array = env->NewByteArray(size);
+    }
+
+    env->SetByteArrayRegion(array, 0, size, reinterpret_cast<jbyte *>(instance.m_checkcard_image_buffer.data()));
 
     return array;
 }
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_sjlee_cardfinder_ViewActivity_GetImagePreProcessingStatus(JNIEnv *env, jobject thiz, jint width, jint height)
+{
+    CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
+
+    bool is_stop;
+    {
+        std::lock_guard<std::mutex> lock(instance.m_image_pre_precessing_mutex);
+        is_stop = instance.m_stop_image_pre_processing_status;
+    }
+
+    return static_cast<jboolean>(is_stop);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_sjlee_cardfinder_ViewActivity_RemoveImagePreProcessing(JNIEnv *env, jobject thiz, jint width, jint height)
+{
+    CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
+    instance.RemoveImagePreProcessing();                                                                         // 스레드풀을 모두 비우기
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_sjlee_cardfinder_ViewActivity_SetDefaultValue(JNIEnv *env, jobject thiz, jint width, jint height)
+{
+    CardFinder& instance = CardFinder::GetInstance(*env, thiz, width, height);
+    {
+        std::lock_guard<std::mutex> lock(instance.m_image_pre_precessing_mutex);
+        instance.m_stop_image_pre_processing_status = false;
+        instance.m_res_coordinate.clear();                                                                       // 저장된 교점 데이터 초기화
+        instance.m_checkcard_image_buffer.clear();
+    }
+}
+
