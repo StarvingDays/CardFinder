@@ -62,8 +62,8 @@ public class ViewActivity extends AppCompatActivity implements ImageAnalysis.Ana
     private Paint m_paint;                                                                                               // 관심영역의 모서리 지점의 좌표를 저장하는 객체
     private boolean m_executor_on, m_close_btn_on, m_is_detected;                                                        // Java 스레드풀 생성 여부와 관련한 boolean 값
     private ExecutorService m_thread_pool;                                                                               // Java 스레드풀 객체
-
     private byte[] m_checkcard_image_buffer;
+    
     private native void ImagePreProcessing(byte[] array, int width, int height);                                         // ImageAnalysis에서 획득한 영상을 분석하는 JNI nateve 함수
     private native float[] GetCoordinates(int width, int height);                                                        // 교점을 초기화하는 JNI native 함수
     private native byte[] GetImageBuffer(int width, int height);
