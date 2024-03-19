@@ -2,6 +2,7 @@ package com.sjlee.cardfinder;
 
 import androidx.appcompat.app.AppCompatActivity;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.widget.TextView;
@@ -33,6 +34,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
@@ -49,6 +51,8 @@ public class MainActivity extends AppCompatActivity {
     public TessBaseAPI m_tess;                                                                      // Tesseract 객체
     private String m_data_path;                                                                     // Tesseract 데이터 경로
     private String m_lan;                                                                           // Tesseract 데이터 언어
+
+    private AtomicBoolean m_is_init = new AtomicBoolean(false);
     private ActivityResultLauncher<Intent> m_launcher =
             registerForActivityResult(
                     new ActivityResultContracts.StartActivityForResult(), result ->
@@ -73,8 +77,8 @@ public class MainActivity extends AppCompatActivity {
                                 {
                                     numbers = matcher.group();
                                 }
-                                
-                                pattern = Pattern.compile("([A-Z]{6}\\s|[A-Z]{9}\\s|[A-Z]{12}\\s)"); // 이름 알파벳의 개수가 6, 9, 12개인 패턴
+
+                                pattern = Pattern.compile("(\\s[A-Z]{6}\\s|[A-Z]{9}\\s|[A-Z]{12}\\s)"); // 이름 알파벳의 개수가 6, 9, 12개인 패턴
                                 matcher = pattern.matcher(card_data);
                           
                                 if(matcher.matches())
@@ -82,7 +86,7 @@ public class MainActivity extends AppCompatActivity {
                                     name = matcher.group();
                                 }
                                 
-                                pattern = Pattern.compile("(\\d{2}\\/\\d{2})");                     // 길이가 2개인 숫자 / 길이가 2개인 숫자
+                                pattern = Pattern.compile("(\\s\\d{2}\\/\\d{2})");                     // 길이가 2개인 숫자 / 길이가 2개인 숫자
                                 matcher = pattern.matcher(card_data);
 
                                 if(matcher.matches())
@@ -116,48 +120,46 @@ public class MainActivity extends AppCompatActivity {
         System.loadLibrary("CardFinder");
     }
 
+    private class InitializeTessInstance extends  Thread{
+        @Override
+        public void run()
+        {
+            if(checkFile(new File(m_data_path + "/tessdata/")))
+            {
+                m_data_path = getCacheDir() + "/tesseract";
+                m_lan = "eng";
+                m_tess = new TessBaseAPI();
+                m_tess.init(m_data_path, m_lan);
+                m_is_init.set(true);
+            }
+
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
+        InitializeTessInstance init = new InitializeTessInstance();
+        init.start();
+
         m_number_text_view = (TextView) findViewById(R.id.numaber_text);                            // 특정 안드로이드의 뷰를 view id를 통해 받아온다
         m_name_text_view = (TextView) findViewById(R.id.name_text);
         m_valid_text_view = (TextView) findViewById(R.id.valid_text);
+
+        m_main_context = this;
 
         m_view_button = (Button) findViewById(R.id.view_button);                                    // view activity로 전환하는 버튼
         m_clear_button = (Button) findViewById(R.id.clear_button);                                  // 분석결과 문자를 지우는 버튼
         m_exit_button = (Button) findViewById(R.id.exit_button);
 
-        m_data_path = getCacheDir() + "/tesseract";
-        m_lan = "eng";
-
-        m_view_button.setOnClickListener(new View.OnClickListener()                                 // view 버튼에 클릭 함수 등록 : view Activity로 진입한다
-        {
-            @Override
-            public void onClick(View v)
-            {
-                if(m_have_permission)                                                               // view Activity로 전환되기 전에 모든 퍼미션을 허가 받고 모델파일을 생성한 뒤에 view로 진입한다
-                {                                                                                   // 모델을 파일경로에 생성하기 전에 view로 진입하면 모델을 불러오는 코드가 예외가 발생하느 문제를 차단한다
-                    if(checkFile(new File(m_data_path + "/tessdata/")))
-                    {
-                        m_tess = new TessBaseAPI();
-
-                        m_tess.init(m_data_path, m_lan);
-
-                        Intent intent = new Intent(getApplicationContext(), ViewActivity.class);
-
-                        m_launcher.launch(intent);
-                    }
-                }
-            }
-        });
 
         m_clear_button.setOnClickListener(new View.OnClickListener()                                // clear 버튼에 클릭 함수 등록 : 결과 텍스쳐를 지운다
         {
@@ -195,7 +197,28 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        m_main_context = this;
+        m_view_button.setOnClickListener(new View.OnClickListener()                                 // view 버튼에 클릭 함수 등록 : view Activity로 진입한다
+        {
+            @Override
+            public void onClick(View v)
+            {
+                if(m_have_permission)                                                               // view Activity로 전환되기 전에 모든 퍼미션을 허가 받고 모델파일을 생성한 뒤에 view로 진입한다
+                {                                                                                   // 모델을 파일경로에 생성하기 전에 view로 진입하면 모델을 불러오는 코드가 예외가 발생하느 문제를 차단한다
+                    if(m_is_init.get())
+                    {
+                        Intent intent = new Intent(getApplicationContext(), ViewActivity.class);
+
+                        m_launcher.launch(intent);
+                    }
+                }
+            }
+        });
+
+        try {
+            init.join();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 
