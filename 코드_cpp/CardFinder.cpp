@@ -86,10 +86,10 @@ auto CardFinder::SetImageProxySize(int row, int col) -> cv::Size
 auto CardFinder::SetCapturedArea(int row, int col) -> cv::Rect
 {
     assert(row < col);
-    int roi_width = col * 0.25f;                                                                                       // 전체 가로 길이에서 0.25를 곱한 길이
+    int roi_width = col * 0.25f;                                                                                     // 전체 가로 길이에서 0.25를 곱한 길이
     int roi_height = roi_width * 1.618f;                                                                             // 전체 세로 길이에서 1.618을 곱한 길이
-    int left = (col - roi_width) / 2;                                                                                  // 관심영역이 놓일 x축
-    int top = (row - roi_height) / 2;                                                                                  // 관심영역이 놓일 y축
+    int left = (col - roi_width) / 2;                                                                                // 관심영역이 놓일 x축
+    int top = (row - roi_height) / 2;                                                                                // 관심영역이 놓일 y축
 
     return cv::Rect(left, top, roi_width, roi_height);
 }
@@ -126,10 +126,10 @@ auto CardFinder::SetPartsOfCapturedArea() -> Rects
     cv::Point pt8(
             (m_captured_area.width - 1) * 0.9f, m_captured_area.height - 1);
 
-    cv::Point cross_pt1 = utils::FindCrossPoint(pt1, pt2, pt3, pt4);                                                        // 교점1
-    cv::Point cross_pt2 = utils::FindCrossPoint(pt1, pt2, pt7, pt8);                                                        // 교점2
-    cv::Point cross_pt3 = utils::FindCrossPoint(pt3, pt4, pt5, pt6);                                                        // 교점3
-    cv::Point cross_pt4 = utils::FindCrossPoint(pt5, pt6, pt7, pt8);                                                        // 교점4
+    cv::Point cross_pt1 = utils::FindCrossPoint(pt1, pt2, pt3, pt4);                                                 // 교점1
+    cv::Point cross_pt2 = utils::FindCrossPoint(pt1, pt2, pt7, pt8);                                                 // 교점2
+    cv::Point cross_pt3 = utils::FindCrossPoint(pt3, pt4, pt5, pt6);                                                 // 교점3
+    cv::Point cross_pt4 = utils::FindCrossPoint(pt5, pt6, pt7, pt8);                                                 // 교점4
 
     m_start_pt_of_right_area = cross_pt2;
     m_start_pt_of_bottom_area = cross_pt3;
@@ -208,8 +208,8 @@ auto CardFinder::SetGaussianFilters(cv::Size size, double D0) -> std::vector<cv:
             filter[1].ptr<float>(v)[u] = H;
         }
     }
-    utils::Shift(filter[0]);                                                                                                // 가운데에 위치한 저주파 필터를 1,2,3,4 분면의 끝부분으로 이동시킴
-    utils::Shift(filter[1]);                                                                                                // 가운데에 위치한 고주파 필터를 1,2,3,4 분면의 끝부분으로 이동시킴
+    utils::Shift(filter[0]);                                                                                         // 가운데에 위치한 저주파 필터를 1,2,3,4 분면의 끝부분으로 이동시킴
+    utils::Shift(filter[1]);                                                                                         // 가운데에 위치한 고주파 필터를 1,2,3,4 분면의 끝부분으로 이동시킴
 
     return filter;
 }
@@ -304,10 +304,10 @@ auto CardFinder::FindRightAngleCorner(Lines& lines1, Lines& lines2) -> cv::Point
                 cv::Point2f pt3(lines2[j][0], lines2[j][1]);                                                         // 직선2 시작지점
                 cv::Point2f pt4(lines2[j][2], lines2[j][3]);                                                         // 직선2 끝지점
 
-                cv::Point2f cross_point = utils::FindCrossPoint(pt1, pt2, pt3, pt4);                                        // 직선 두개의 시작점과 끝지점을 받아 교점을 획득
+                cv::Point2f cross_point = utils::FindCrossPoint(pt1, pt2, pt3, pt4);                                 // 직선 두개의 시작점과 끝지점을 받아 교점을 획득
 
 
-                float cos_ang = utils::FindAngle(                                                                           // 벡터의 내적에서 코사인 각을 획득
+                float cos_ang = utils::FindAngle(                                                                    // 벡터의 내적에서 코사인 각을 획득
                         cross_point - pt2,
                         cross_point - pt4);
 
