@@ -16,7 +16,7 @@ class CardFinder
 public:
     using Lines = std::vector<cv::Vec4f>;
     using Rects = std::vector<cv::Rect>;
-
+    using RectCornerPoints = std::tuple<cv::Point2f, cv::Point2f, cv::Point2f, cv::Point2f>;
     // 상단, 좌측, 하단, 우측 영상을 구분하는 enum class
     enum class AreaLocation
     {
@@ -27,26 +27,17 @@ public:
     };
 
     // Singleton Instance 생성 함수
-    static CardFinder& GetInstance(JNIEnv& env, jobject& obj, int& w, int& h);
-    // 영상 분석 시작함수
-    auto InputImageData(unsigned char* data, jint& col, jint& row);
-    // 전체 관심영역 반환 함수
-    auto RemoveImagePreProcessing() -> void;
-    // 소멸자
-    ~CardFinder();
-
-
-private:
-    // CardFinder Instance 생성자
-    CardFinder(JNIEnv& env, jobject& obj, int& w, int& h);
-    // 이미지 전처리 함수
-    auto ImagePreProcessing(std::vector<uchar>& img_buffer) -> void;
+    static CardFinder& GetInstance(JNIEnv& env, jobject& obj, int row, int col);
+    // 이미지 프록시 사이
+    auto GetImageProxySize() -> cv::Size&;
     // 안드로이드 스튜디오 java PreviewView의 관심영역의 크기를 획득하는 함수
     auto GetImageViewSize(JNIEnv& env, jobject& obj, const char* class_dir) -> cv::Size;
+    // 프록시 이미지 사이즈를 획득하는 함수
+    auto SetImageProxySize(int row, int col) -> cv::Size;
     // 전체 관심영역을 획득하는 함수
-    auto SetCapturedArea(int w, int h) -> cv::Rect;
+    auto SetCapturedArea(int row, int col) -> cv::Rect;
     // 스케일팩터를 계산하는 함수
-    auto SetScaleFactor(int w, int h) -> cv::Point2f;
+    auto SetScaleFactor(int row, int col) -> cv::Point2f;
     // 부분관심영역(가로, 세로)을 획득하는 함수
     auto SetPartsOfCapturedArea() -> Rects;
     // 최소자승밝기보정에 사용되는 행렬을 만드는 함수
@@ -57,10 +48,27 @@ private:
     auto SetGaussianFilters(cv::Size size, double D0) -> std::vector<cv::Mat>;
     // Contrast Limiting Adaptive Histogram Equalization 객체 생성 함수
     auto SetCLAHE(double limit_var, cv::Size tile_size) -> cv::Ptr<cv::CLAHE>;
+    // 소멸자
+    ~CardFinder();
+
+
+private:
+    // CardFinder Instance 생성자
+    CardFinder(JNIEnv& env, jobject& obj, int& row, int& col);
+    // CardFinder Process 실행 함수
+    auto RunCardFindProcess(std::vector<uchar> img_buffer) -> void;
+    // 체크카드 모서리 교점 네 개를 획득하는 함수
+    auto FindRectCorner(cv::Mat& img) -> RectCornerPoints;
+    // 직선이 기울어진 각도를 구하는 함수
+    auto FindCosAngleFromLine(cv::Point2f pt1, cv::Point2f pt2, AreaLocation areaLoc) -> float;
+    // 각도 만큼 영상을 회전시키는 함수
+    auto RotateByAngle(cv::Mat& img, float ang) -> cv::Mat;
+    // 이미지 전처리 함수
+    auto RunImagePreProcess(cv::Mat& img) -> cv::Mat;
     // 체크카드의 가로 세로 직선을 얻는 함수
     auto FindLines(cv::Mat& src, AreaLocation arealoc) -> Lines;
     // 체크카드의 모서리 지점을 찾는 함수
-    auto FindCorner(Lines& lines1, Lines& lines2) -> cv::Point2f;
+    auto FindRightAngleCorner(Lines& lines1, Lines& lines2) -> cv::Point2f;
     // 최소자승밝기보정을 수행하는 함수
     auto BrightCorrect(cv::Mat& src) -> cv::Mat&;
     // 푸리에 HomomorhpicFitering을 수행하는 함수
@@ -90,21 +98,18 @@ private:
     std::vector<cv::Mat> m_gaussian_filters;
     // pulling 스레드 내부의 while 루프용 atomic<bool>
     std::atomic_bool m_thread_pool_on;
-    // 이미지 전처리 작업 큐
-    std::queue<std::vector<uchar>> m_image_data_queue;
     // 스레드풀
     std::vector<std::thread> m_thread_pool;
-    // 스레드 대기용 객체
-    std::condition_variable m_conv;
-    // 스레드 임계영역 처리용 mutex
-    std::mutex m_thread_pool_mutex;
+
 public:
+    // 이미지 전처리 작업 큐
+    std::queue<std::vector<uchar>> m_image_data_queue;
     // 전체 관심영역으로 포착된 이미지
     std::vector<jfloat> m_res_coordinate;
-    // 이미지 전처리 중단용 atomic<bool>
-    bool m_stop_image_pre_processing_status;
     // json 포멧의 response 패킷의 body 메세지가 저장되는 string 객체
     std::vector<uchar> m_checkcard_image_buffer;
     // 스레드 임계영역 처리용 mutex
-    std::mutex m_image_pre_precessing_mutex;
+    std::mutex m_thread_pool_mutex, m_card_find_process_mutex;
+    // 스레드 대기용 객체
+    std::condition_variable m_conv;
 };
