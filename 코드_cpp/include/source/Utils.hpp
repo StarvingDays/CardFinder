@@ -3,11 +3,9 @@
 #include <opencv2/highgui.hpp>
 
 #include <cmath>
-#include <mutex>
 
 
-
-// µÎ Á¡»çÀÌÀÇ °Å¸®¸¦ ±¸ÇÏ´Â ÇÔ¼ö
+// ë‘ ì ì‚¬ì´ì˜ ê±°ë¦¬ë¥¼ êµ¬í•˜ëŠ” í•¨ìˆ˜
 template<template<typename E> class C = cv::Point_, typename T,
         typename = typename std::enable_if<
                 std::is_arithmetic<T>::value ||
@@ -19,7 +17,7 @@ auto CalcDist(C<T> const& pt1, C<T> const& pt2)
             ((pt1.y - pt2.y) * (pt1.y - pt2.y)));
 }
 
-// µÎ Á÷¼±(³× °³ÀÇ Á¡)ÀÌ ÀÌ·ç´Â ±³Á¡À» ¾ò´Â ÇÔ¼ö
+// ë‘ ì§ì„ (ë„¤ ê°œì˜ ì )ì´ ì´ë£¨ëŠ” êµì ì„ ì–»ëŠ” í•¨ìˆ˜
 template<template<typename E> class C = cv::Point_, typename T,
         typename = typename std::enable_if<
                 std::is_arithmetic<T>::value ||
@@ -32,13 +30,13 @@ C<T> FindCrossPoint(C<T> const& pt1, C<T> const& pt2, C<T> const& pt3, C<T> cons
 
     try
     {
-        xChild = (((pt1.x * pt2.y) - (pt1.y * pt2.x)) * (pt3.x - pt4.x)) -                                              // xÃà ºĞÀÚ
+        xChild = (((pt1.x * pt2.y) - (pt1.y * pt2.x)) * (pt3.x - pt4.x)) -                                              // xì¶• ë¶„ì
                  ((pt1.x - pt2.x) * ((pt3.x * pt4.y) - (pt3.y * pt4.x)));
 
-        yChild = (((pt1.x * pt2.y) - (pt1.y * pt2.x)) * (pt3.y - pt4.y)) -                                              // yÃà ºĞÀÚ
+        yChild = (((pt1.x * pt2.y) - (pt1.y * pt2.x)) * (pt3.y - pt4.y)) -                                              // yì¶• ë¶„ì
                  ((pt1.y - pt2.y) * ((pt3.x * pt4.y) - (pt3.y * pt4.x)));
 
-        mother = ((pt1.x - pt2.x) * (pt3.y - pt4.y)) - ((pt1.y - pt2.y) * (pt3.x - pt4.x));                             // ºĞ¸ğ
+        mother = ((pt1.x - pt2.x) * (pt3.y - pt4.y)) - ((pt1.y - pt2.y) * (pt3.x - pt4.x));                             // ë¶„ëª¨
     }
     catch (std::exception& ex)
     {
@@ -48,37 +46,37 @@ C<T> FindCrossPoint(C<T> const& pt1, C<T> const& pt2, C<T> const& pt3, C<T> cons
     return C<T>(xChild / mother, yChild / mother);
 }
 
-// º¤ÅÍÀÇ ³»ÀûÀ¸·Î °¢µµ¸¦ ±¸ÇÏ´Â ÇÔ¼ö
+// ë²¡í„°ì˜ ë‚´ì ìœ¼ë¡œ ê°ë„ë¥¼ êµ¬í•˜ëŠ” í•¨ìˆ˜
 template<template<typename E> class C = cv::Point_, typename T,
         typename = typename std::enable_if<
                 std::is_arithmetic<T>::value ||
                 std::is_same<std::decay_t<C<T>>, cv::Point_<T>>::value>::type>
 T FindAngle(C<T> const& pt1, C<T> const& pt2)
 {
-    T len1 = std::sqrt(std::pow(pt1.x, 2) + std::pow(pt1.y, 2));                                                        // µÎ Á¡»çÀÌÀÇ °Å¸®¸¦ °è»ê
+    T len1 = std::sqrt(std::pow(pt1.x, 2) + std::pow(pt1.y, 2));                                                        // ë‘ ì ì‚¬ì´ì˜ ê±°ë¦¬ë¥¼ ê³„ì‚°
     T len2 = std::sqrt(std::pow(pt2.x, 2) + std::pow(pt2.y, 2));
-    T dotProduct = (pt1.x * pt2.x) + (pt1.y * pt2.y);                                                                   // º¤ÅÍ ³»Àû È¹µæ
-    T crossProduct = (pt1.x * pt2.y) - (pt1.y * pt2.x);                                                                 // º¤ÅÍ ¿ÜÀû È¹µæ
+    T dotProduct = (pt1.x * pt2.x) + (pt1.y * pt2.y);                                                                   // ë²¡í„° ë‚´ì  íšë“
+    T crossProduct = (pt1.x * pt2.y) - (pt1.y * pt2.x);                                                                 // ë²¡í„° ì™¸ì  íšë“
 
-    T cosine = dotProduct / (len1 * len2);                                                                              // ÄÚ»çÀÎ °¢ È¹µæ
-    T angle_degree = std::acos(cosine) * (180.0f / CV_PI);                                                              // ¾ÆÅ©ÄÚ»çÀÎÀ¸·Î °¢µµ È¹µæ
+    T cosine = dotProduct / (len1 * len2);                                                                              // ì½”ì‚¬ì¸ ê° íšë“
+    T angle_degree = std::acos(cosine) * (180.0f / CV_PI);                                                              // ì•„í¬ì½”ì‚¬ì¸ìœ¼ë¡œ ê°ë„ íšë“
 
-    if (crossProduct < 0) angle_degree = -angle_degree;                                                                 // º¤ÅÍ ¿ÜÀûÀÌ 0º¸´Ù ÀÛÀ¸¸é -°ªÀ¸·Î º¯È¯
+    if (crossProduct < 0) angle_degree = -angle_degree;                                                                 // ë²¡í„° ì™¸ì ì´ 0ë³´ë‹¤ ì‘ìœ¼ë©´ -ê°’ìœ¼ë¡œ ë³€í™˜
 
 
     return angle_degree;
 }
 
 
-// 90µµ·Î ¿µ»óÀ» È¸Àü½ÃÅ°´Â ÇÔ¼ö
+// 90ë„ë¡œ ì˜ìƒì„ íšŒì „ì‹œí‚¤ëŠ” í•¨ìˆ˜
 template<typename T, int CV_TYPE, typename = typename
 std::enable_if_t<std::is_same<T, uchar>::value ||
                  std::is_same<T, cv::Vec3b>::value>>
 cv::Mat Rotate90(cv::Mat& src)
 {
     static_assert(
-            (std::is_same<T, uchar>::value && std::integral_constant<int, CV_TYPE>::value == CV_8UC1) ||                // Å¸ÀÔÀÌ uchar and CV_8UC1 ÀÌ°Å³ª
-            (std::is_same<T, cv::Vec3b>::value && std::integral_constant<int, CV_TYPE>::value == CV_8UC3),              // Å¸ÀÔÀÌ Vec3b and CV_8UC3°¡ ¾Æ´Ï¸é ÄÄÆÄÀÏ ¿¡·¯
+            (std::is_same<T, uchar>::value && std::integral_constant<int, CV_TYPE>::value == CV_8UC1) ||                // íƒ€ì…ì´ uchar and CV_8UC1 ì´ê±°ë‚˜
+            (std::is_same<T, cv::Vec3b>::value && std::integral_constant<int, CV_TYPE>::value == CV_8UC3),              // íƒ€ì…ì´ Vec3b and CV_8UC3ê°€ ì•„ë‹ˆë©´ ì»´íŒŒì¼ ì—ëŸ¬
             "typename T and cv_type must be uchar-CV_8UC1 or Vec3b-CV_8UC3");
 
     cv::Mat dst = cv::Mat::zeros(cv::Size(src.rows, src.cols), CV_TYPE);
@@ -93,14 +91,14 @@ cv::Mat Rotate90(cv::Mat& src)
         T* ptr = dst.ptr<T>(x);
         for (y = 0; y < h; y++)
         {
-            ptr[y] = src.ptr<T>(h - 1 - y)[x];                                                                          // °¢ ÇÈ¼¿µéÀ» 90µµ·Î È¸ÀüµÈ ÀÚ¸®¿¡ »ğÀÔ
+            ptr[y] = src.ptr<T>(h - 1 - y)[x];                                                                          // ê° í”½ì…€ë“¤ì„ 90ë„ë¡œ íšŒì „ëœ ìë¦¬ì— ì‚½ì…
         }
     }
 
     return dst;
 }
 
-// ÀÌ¹ÌÁöÀÇ 1,2,3,4ºĞ ¸éÀ» ÃëÇÏ¿© º¯È¯ÇÏ´Â ÇÔ¼ö
+// ì´ë¯¸ì§€ì˜ 1,2,3,4ë¶„ ë©´ì„ ì·¨í•˜ì—¬ ë³€í™˜í•˜ëŠ” í•¨ìˆ˜
 void Shift(cv::Mat& src)
 {
     int midCol = src.cols >> 1;
@@ -109,20 +107,20 @@ void Shift(cv::Mat& src)
     int isColOdd = src.cols % 2 == 1;
     int isRowOdd = src.rows % 2 == 1;
 
-    cv::Mat q0(src, cv::Rect(0, 0, midCol + isColOdd, midRow + isRowOdd));                                             // 1»çºĞ¸é ¿µ»ó
-    cv::Mat q1(src, cv::Rect(midCol + isColOdd, 0, midCol, midRow + isRowOdd));                                        // 2»çºĞ¸é ¿µ»ó
-    cv::Mat q2(src, cv::Rect(0, midRow + isRowOdd, midCol + isColOdd, midRow));                                        // 3»çºĞ¸é ¿µ»ó
-    cv::Mat q3(src, cv::Rect(midCol + isColOdd, midRow + isRowOdd, midCol, midRow));                                   // 4»çºĞ¸é ¿µ»ó
+    cv::Mat q0(src, cv::Rect(0, 0, midCol + isColOdd, midRow + isRowOdd));                                             // 1ì‚¬ë¶„ë©´ ì˜ìƒ
+    cv::Mat q1(src, cv::Rect(midCol + isColOdd, 0, midCol, midRow + isRowOdd));                                        // 2ì‚¬ë¶„ë©´ ì˜ìƒ
+    cv::Mat q2(src, cv::Rect(0, midRow + isRowOdd, midCol + isColOdd, midRow));                                        // 3ì‚¬ë¶„ë©´ ì˜ìƒ
+    cv::Mat q3(src, cv::Rect(midCol + isColOdd, midRow + isRowOdd, midCol, midRow));                                   // 4ì‚¬ë¶„ë©´ ì˜ìƒ
 
-    if (!(isColOdd || isRowOdd))                                                                                       // cols¿Í rows µÑ ÁßÇÏ³ªÀÇ ±æÀÌ°¡ Â¦¼öÀÎ °æ¿ì
+    if (!(isColOdd || isRowOdd))                                                                                       // colsì™€ rows ë‘˜ ì¤‘í•˜ë‚˜ì˜ ê¸¸ì´ê°€ ì§ìˆ˜ì¸ ê²½ìš°
     {
-        cv::Mat tmp;                                                                                                   // 1»çºĞ¸é°ú 3»çºĞ¸éÀ» ±³È¯
+        cv::Mat tmp;                                                                                                   // 1ì‚¬ë¶„ë©´ê³¼ 3ì‚¬ë¶„ë©´ì„ êµí™˜
         q0.copyTo(tmp);
         q0.copyTo(tmp);
         q3.copyTo(q0);
         tmp.copyTo(q3);
 
-        q1.copyTo(tmp);                                                                                                // 2»çºĞ¸é°ú 4»çºĞ¸éÀ» ±³È¯
+        q1.copyTo(tmp);                                                                                                // 2ì‚¬ë¶„ë©´ê³¼ 4ì‚¬ë¶„ë©´ì„ êµí™˜
         q2.copyTo(q1);
         tmp.copyTo(q2);
     }
