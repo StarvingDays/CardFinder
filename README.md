@@ -7,3 +7,4 @@
 
 CardFinder.7z : 안드로이드 스튜디오 CardFinder 전체 프로젝트
 
+결과영상.mp4 : 체크카드 인식 결과영상
