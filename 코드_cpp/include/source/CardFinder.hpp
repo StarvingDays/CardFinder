@@ -103,9 +103,9 @@ private:
 public:
     // 이미지 전처리 작업 큐
     std::queue<std::vector<uchar>> m_image_data_queue;
-    // 전체 관심영역으로 포착된 이미지
+    // 체크카드 모서리 교점이 저장되는 객체
     std::vector<jfloat> m_res_coordinate;
-    // json 포멧의 response 패킷의 body 메세지가 저장되는 string 객체
+    // 체크카드 이미지를 1차원 버퍼로 저장받는 객체
     std::vector<uchar> m_checkcard_image_buffer;
     // 스레드 임계영역 처리용 mutex
     std::mutex m_thread_pool_mutex, m_card_find_process_mutex;
