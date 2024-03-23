@@ -6,7 +6,6 @@
 #include <vector>
 #include <thread>
 #include <mutex>
-#include <future>
 
 // Singleton Instance
 // Java에 CardFinder 인스턴스를 저장 못 하기 때문에
